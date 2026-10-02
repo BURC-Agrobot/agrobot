@@ -3,14 +3,18 @@
 ## Mission
 
 Rebuild Agrobot's software from scratch with the engineering team. The FAST
-(Function Analysis System Technique) diagram in `docs/agrobot-functions.pdf`
+(Function Analysis System Technique) diagram in `md_docs/agrobot-functions.md`
 drives all development.
 
 ## Before writing code
 
 - Read the FAST diagram and name the functions your change serves. Use them to
-  guide design, implementation, and tests. If the diagram is missing or unclear,
-  ask the user to identify it.
+  guide design, implementation, and tests. If the diagram is unclear, ask the
+  engineer to clarify it.
+- Read project diagrams from `md_docs/`, which lists each diagram's nodes and
+  edges as text for agents. `pdf_docs/` holds the same diagrams drawn for
+  people; open a PDF only when an engineer asks. If a Markdown file is missing
+  or disagrees with its PDF, stop and ask the engineer which one is correct.
 - Reason from first principles: decide what the system must do and why, then
   derive the solution from the FAST functions, current requirements, and
   verified physical constraints. Do not carry over old designs or translate old
