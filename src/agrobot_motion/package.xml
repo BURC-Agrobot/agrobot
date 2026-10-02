@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<package format="3">
+  <!-- Identify the package and its ownership for ROS discovery -->
+  <name>agrobot_motion</name>
+  <version>0.1.0</version>
+  <description>Joint motion planning and execution for Agrobot mock hardware.</description>
+  <maintainer email="gsylvia@bu.edu">Garrett Sylvia</maintainer>
+  <license>BSD-3-Clause</license>
+  <!-- Declare the build and interface-generation tools -->
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>rosidl_default_generators</buildtool_depend>
+  <!-- Declare libraries used to compile and run the motion node -->
+  <depend>rclcpp</depend>
+  <depend>rclcpp_action</depend>
+  <depend>control_msgs</depend>
+  <depend>controller_manager_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>trajectory_msgs</depend>
+  <depend>moveit_msgs</depend>
+  <depend>moveit_core</depend>
+  <depend>moveit_ros_planning</depend>
+  <!-- Declare the runtime components used by the mock launch -->
+  <exec_depend>rosidl_default_runtime</exec_depend>
+  <exec_depend>agrobot_moveit_config</exec_depend>
+  <exec_depend>moveit_configs_utils</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>controller_manager</exec_depend>
+  <exec_depend>joint_state_broadcaster</exec_depend>
+  <exec_depend>joint_trajectory_controller</exec_depend>
+  <exec_depend>hardware_interface</exec_depend>
+  <!-- Declare the analysis tools required by test-enabled builds -->
+  <test_depend>clang-tidy</test_depend>
+  <test_depend>python3-mypy</test_depend>
+  <!-- Register generated action interfaces for downstream packages -->
+  <member_of_group>rosidl_interface_packages</member_of_group>
+  <!-- Select the build system used by colcon -->
+  <export><build_type>ament_cmake</build_type></export>
+</package>

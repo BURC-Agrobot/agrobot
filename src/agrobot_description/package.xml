@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>agrobot_description</name>
+  <version>0.0.0</version>
+  <description>URDF and meshes for Agrobot.</description>
+  <maintainer email="robotics-club@todo.todo">robotics-club</maintainer>
+  <license>TODO: License declaration</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <exec_depend>xacro</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

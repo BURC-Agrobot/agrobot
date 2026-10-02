@@ -1,0 +1,6 @@
+# Select lifetime, conversion, performance, and static-analysis checks
+Checks: '-*,bugprone-use-after-move,bugprone-dangling-handle,bugprone-narrowing-conversions,performance-for-range-copy,clang-analyzer-*'
+# Fail compilation when a selected check reports a warning
+WarningsAsErrors: '*'
+# Report project header findings without expanding dependency noise
+HeaderFilterRegex: 'agrobot_motion/(include|src|test)/.*'

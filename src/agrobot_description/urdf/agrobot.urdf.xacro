@@ -1,0 +1,217 @@
+<?xml version="1.0"?>
+
+<robot name="agrobot" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+    <!-- SI units; STL coordinates are converted from millimetres by mesh scale. -->
+    <material name="grey">
+        <color rgba="0.5 0.5 0.5 1.0"/>
+    </material>
+    <material name="light_blue">
+        <color rgba="0.54 0.81 0.94 1.0"/>
+    </material>
+    <material name="orange">
+        <color rgba="1.0 0.5 0.0 1.0"/>
+    </material>
+    <material name="green">
+        <color rgba="0.0 1.0 0.0 1.0"/>
+    </material>
+    <material name="pink">
+        <color rgba="0.97 0.78 0.86 1.0"/>
+    </material>
+    <material name="blue">
+        <color rgba="0.0 0.0 0.5 1.0"/>
+    </material>
+
+    <link name="world"/>
+
+    <link name="rail_link">
+        <visual>
+            <geometry>
+                <box size="2.97 0.45 0.082"/>
+            </geometry>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <material name="grey"/>
+        </visual>
+        <collision>
+            <geometry>
+                <box size="2.97 0.45 0.082"/>
+            </geometry>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+        </collision>
+    </link>
+
+    <link name="base_link">
+        <visual>
+            <geometry>
+                <mesh filename="package://agrobot_description/meshes/base_link_visual.stl" scale="0.001 0.001 0.001"/>
+            </geometry>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <material name="grey"/>
+        </visual>
+        <collision>
+            <geometry>
+                <mesh filename="package://agrobot_description/meshes/base_link_collision.stl" scale="0.001 0.001 0.001"/>
+            </geometry>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+        </collision>
+    </link>
+
+    <link name="arm_link_1">
+        <visual>
+            <geometry>
+                <mesh filename="package://agrobot_description/meshes/arm_link_1_visual.stl" scale="0.001 0.001 0.001"/>
+            </geometry>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <material name="light_blue"/>
+        </visual>
+        <collision>
+            <geometry>
+                <mesh filename="package://agrobot_description/meshes/arm_link_1_collision.stl" scale="0.001 0.001 0.001"/>
+            </geometry>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+        </collision>
+    </link>
+
+    <link name="arm_link_2">
+        <visual>
+            <geometry>
+                <mesh filename="package://agrobot_description/meshes/arm_link_2_visual.stl" scale="0.001 0.001 0.001"/>
+            </geometry>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <material name="orange"/>
+        </visual>
+        <collision>
+            <geometry>
+                <mesh filename="package://agrobot_description/meshes/arm_link_2_collision.stl" scale="0.001 0.001 0.001"/>
+            </geometry>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+        </collision>
+    </link>
+
+    <link name="arm_link_3">
+        <visual>
+            <geometry>
+                <mesh filename="package://agrobot_description/meshes/arm_link_3_visual.stl" scale="0.001 0.001 0.001"/>
+            </geometry>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <material name="green"/>
+        </visual>
+        <collision>
+            <geometry>
+                <mesh filename="package://agrobot_description/meshes/arm_link_3_collision.stl" scale="0.001 0.001 0.001"/>
+            </geometry>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+        </collision>
+    </link>
+
+    <link name="arm_link_4">
+        <visual>
+            <geometry>
+                <mesh filename="package://agrobot_description/meshes/arm_link_4_visual.stl" scale="0.001 0.001 0.001"/>
+            </geometry>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <material name="pink"/>
+        </visual>
+        <collision>
+            <geometry>
+                <mesh filename="package://agrobot_description/meshes/arm_link_4_collision.stl" scale="0.001 0.001 0.001"/>
+            </geometry>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+        </collision>
+    </link>
+
+    <link name="arm_link_5">
+        <visual>
+            <geometry>
+                <mesh filename="package://agrobot_description/meshes/arm_link_5_visual.stl" scale="0.001 0.001 0.001"/>
+            </geometry>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <material name="blue"/>
+        </visual>
+        <collision>
+            <geometry>
+                <mesh filename="package://agrobot_description/meshes/arm_link_5_collision.stl" scale="0.001 0.001 0.001"/>
+            </geometry>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+        </collision>
+    </link>
+
+    <link name="arm_link_6">
+        <visual>
+            <geometry>
+                <mesh filename="package://agrobot_description/meshes/arm_link_6.stl" scale="0.001 0.001 0.001"/>
+            </geometry>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <material name="grey"/>
+        </visual>
+        <collision>
+            <geometry>
+                <mesh filename="package://agrobot_description/meshes/arm_link_6.stl" scale="0.001 0.001 0.001"/>
+            </geometry>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+        </collision>
+    </link>
+
+    <joint name="world_to_rail_joint" type="fixed">
+        <parent link="world"/>
+        <child link="rail_link"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+
+    <joint name="rail_joint" type="prismatic">
+        <parent link="rail_link"/>
+        <child link="base_link"/>
+        <origin xyz="0.7825 0 0.0508" rpy="0 0 ${pi}"/>
+        <axis xyz="1 0 0"/>
+        <limit effort="100" velocity="0.5" lower="0" upper="1.565"/>
+    </joint>
+
+    <joint name="arm_joint_1" type="revolute">
+        <parent link="base_link"/>
+        <child link="arm_link_1"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <axis xyz="0 0 1"/>
+        <limit effort="37" velocity="0.4" lower="${-pi}" upper="${pi}"/>
+    </joint>
+
+    <joint name="arm_joint_2" type="revolute">
+        <parent link="arm_link_1"/>
+        <child link="arm_link_2"/>
+        <origin xyz="-0.145 0 0.212599" rpy="0 0 0"/>
+        <axis xyz="1 0 0"/>
+        <limit effort="144" velocity="1.96" lower="${-pi/2}" upper="${pi/2}"/>
+    </joint>
+
+    <joint name="arm_joint_3" type="revolute">
+        <parent link="arm_link_2"/>
+        <child link="arm_link_3"/>
+        <origin xyz="-0.017125 0 0.663309" rpy="0 ${-pi/2} ${pi}"/>
+        <axis xyz="0 0 1"/>
+        <limit effort="77" velocity="3.65" lower="-4.5" upper="1.5"/>
+    </joint>
+
+    <joint name="arm_joint_4" type="revolute">
+        <parent link="arm_link_3"/>
+        <child link="arm_link_4"/>
+        <origin xyz="0 0.083285 0.08" rpy="${-pi/2} 0 0"/>
+        <axis xyz="0 0 1"/>
+        <limit effort="25" velocity="2" lower="${-pi}" upper="${pi}"/>
+    </joint>
+
+    <joint name="arm_joint_5" type="revolute">
+        <parent link="arm_link_4"/>
+        <child link="arm_link_5"/>
+        <origin xyz="-0.054 0 0.4645" rpy="0 ${pi/2} 0"/>
+        <axis xyz="0 0 1"/>
+        <limit effort="24" velocity="3.5" lower="-5" upper="5"/>
+    </joint>
+
+    <joint name="arm_joint_6" type="revolute">
+        <parent link="arm_link_5"/>
+        <child link="arm_link_6"/>
+        <origin xyz="-0.057 0 -0.055033" rpy="0 ${-pi/2} 0"/>
+        <axis xyz="0 0 1"/>
+        <limit effort="24" velocity="3.5" lower="0" upper="${2*pi/3}"/>
+    </joint>
+
+</robot>

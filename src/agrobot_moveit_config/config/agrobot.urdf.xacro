@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="agrobot">
+    <xacro:arg name="initial_positions_file" default="initial_positions.yaml" />
+
+    <!-- Import agrobot urdf file -->
+    <xacro:include filename="$(find agrobot_description)/urdf/agrobot.urdf.xacro" />
+
+    <!-- Import control_xacro -->
+    <xacro:include filename="agrobot.ros2_control.xacro" />
+
+
+    <xacro:agrobot_ros2_control name="FakeSystem" initial_positions_file="$(arg initial_positions_file)"/>
+
+</robot>

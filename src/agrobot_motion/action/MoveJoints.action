@@ -1,0 +1,28 @@
+# Select exactly one group so arm and rail requests share one owner
+uint8 ARM=0
+uint8 RAIL=1
+# Identify the selected group using the constants above
+uint8 group
+# Set arm joints 1 through 6 in radians and leave zero for rail requests
+float64[6] arm_positions_rad
+# Set rail position in metres and leave zero for arm requests
+float64 rail_position_m
+---
+# Distinguish completion, cancellation, and failures for the caller
+uint8 SUCCESS=0
+uint8 CANCELED=1
+uint8 UNAVAILABLE=2
+uint8 PLANNING_FAILED=3
+uint8 EXECUTION_FAILED=4
+uint8 STOP_FAILED=5
+# Return the terminal outcome after stop checks finish
+uint8 code
+# Explain the outcome so the caller can diagnose failures
+string message
+# Confirm fresh stillness and a terminal controller if motion was sent
+bool stop_confirmed
+---
+# Report the current phase while the request remains active
+string state
+# Report elapsed monotonic time so callers can observe request duration
+float64 elapsed_s
