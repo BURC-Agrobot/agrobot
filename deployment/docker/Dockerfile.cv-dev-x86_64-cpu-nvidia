@@ -1,0 +1,76 @@
+# syntax=docker/dockerfile:1.7
+
+# CV development runtime for x86-64 CPUs and NVIDIA CUDA GPUs
+# Build from the repository root
+#   docker build \
+#     --file deployment/docker/Dockerfile.cv-dev-x86_64-cpu-nvidia \
+#     --tag agrobot-cv:dev-x86_64-cpu-nvidia \
+#     .
+
+# Pin the Linux x86-64 ROS Jazzy base for Intel and AMD development machines
+FROM ros:jazzy-ros-base-noble@sha256:a5426de405f6f0a82b0f3def3bbd3bce2a71a91421fe980c17613b4e51ef38d9
+
+# Install ROS image interfaces and tools for building the perception package
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3-venv \
+    python3-colcon-common-extensions \
+    ros-jazzy-cv-bridge \
+    ros-jazzy-image-transport \
+    ros-jazzy-vision-msgs \
+    ros-jazzy-sensor-msgs-py \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Expose ROS system packages while keeping ML packages in their own environment
+RUN python3 -m venv --system-site-packages /opt/venv
+
+# Reuse the perception dependency versions from the deployment runtime
+COPY deployment/docker/requirements.txt /opt/agrobot/requirements.txt
+
+# Prepare the pinned tools needed to build the Python source packages
+RUN /opt/venv/bin/python -m pip install --no-cache-dir --no-deps \
+    --constraint /opt/agrobot/requirements.txt setuptools wheel
+
+# Install CUDA PyTorch, which also supports CPU execution without GPU access
+# Pin utilities whose versions are not fixed by the PyTorch dependencies
+RUN /opt/venv/bin/python -m pip install --no-cache-dir \
+    --index-url https://download.pytorch.org/whl/cu128 \
+    --constraint /opt/agrobot/requirements.txt \
+    torch==2.9.1+cu128 torchvision==0.24.1+cu128 \
+    sympy==1.14.0 networkx==3.4.2 mpmath==1.3.0
+
+# Preserve PyTorch and omit the optional SAM2 extension as in the AMD recipe
+RUN SAM2_BUILD_CUDA=0 /opt/venv/bin/python -m pip install \
+    --no-cache-dir --no-deps --no-build-isolation \
+    --requirement /opt/agrobot/requirements.txt && \
+    /opt/venv/bin/python -m pip check
+
+# Make ML packages available to both virtual and ROS system Python commands
+ENV PATH=/opt/venv/bin:${PATH}
+ENV PYTHONPATH=/opt/venv/lib/python3.12/site-packages
+
+# Check the CPU runtime during builds without downloading model weights
+RUN python -c "import torch; import torchvision; \
+    assert torch.__version__ == '2.9.1+cu128'; \
+    assert torch.version.cuda == '12.8'; \
+    assert torch.equal(torch.eye(2) @ torch.ones(2, 2), torch.ones(2, 2)); \
+    boxes = torch.tensor([[0., 0., 1., 1.], [0., 0., 1., 1.]]); \
+    assert torchvision.ops.nms(boxes, torch.tensor([0.9, 0.8]), 0.5).tolist() == [0]"
+
+# Check the ROS and ML imports together without loading the perception models
+RUN /bin/bash -c 'source /opt/ros/jazzy/setup.bash && python -c \
+    "import rclpy, cv_bridge, sensor_msgs_py, sam2; \
+    from transformers import AutoModel, Qwen2_5_VLForConditionalGeneration; \
+    from qwen_vl_utils import process_vision_info"'
+
+# Keep the workspace paths used by the archived pipeline and startup script
+WORKDIR /workspace
+RUN mkdir -p /ros2_ws/src
+ENV ROS_DOMAIN_ID=0
+ENV ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET
+
+# Reuse the ROS entrypoint so interactive commands inherit the ROS environment
+COPY deployment/docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["bash"]
