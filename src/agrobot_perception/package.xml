@@ -1,0 +1,53 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<!--
+  package.xml — ROS 2 Package Manifest (Format 3)
+
+  This file is the "identity card" of a ROS 2 package. It is read by:
+    - rosdep  : to install system dependencies (`rosdep install -from-paths src`)
+    - colcon  : to determine build order and package type
+    - ros2 pkg: for introspection (`ros2 pkg list`, `ros2 pkg executables`)
+    - rqt     : for plugin discovery
+
+  It lives alongside BUILD.bazel (the Bazel manifest) — they describe the same
+  package to different toolchains. They do not conflict.
+-->
+<package format="3">
+  <name>agrobot_perception</name>
+  <version>0.1.0</version>
+  <description>
+    Agrobot TOM v2 perception pipeline.
+    Provides tomato detection, segmentation, and 3D localization nodes
+    using DINOv2 + SAM2 (Sprint 2) running on ROS 2 Jazzy.
+  </description>
+
+  <maintainer email="howardw1120@gmail.com">Agrobot Team</maintainer>
+  <license>None</license>
+
+  <!-- Build tool: ament_python for pure-Python ROS 2 packages -->
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <!-- Runtime dependencies (must be installable via rosdep) -->
+  <depend>rclpy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>sensor_msgs_py</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>vision_msgs</depend>
+  <depend>cv_bridge</depend>
+  <depend>image_transport</depend>
+
+  <!-- Python library dependencies (installed via pip, not rosdep) -->
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
+
+  <!-- Test dependencies -->
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

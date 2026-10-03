@@ -1,0 +1,189 @@
+###############################################################################
+# perception/BUILD.bazel — Bazel Build Targets for the Perception Package
+#
+# This is the Bazel manifest for agrobot_perception. It exists alongside
+# package.xml (ROS 2 / colcon) — they describe the same package to different
+# toolchains and do not conflict.
+#
+# Target naming convention:
+#   //perception:image_utils       → py_library (importable by other packages)
+#   //perception:tomato_detector   → py_binary (runnable executable)
+#   //perception:perception_test   → py_test (unit tests)
+###############################################################################
+
+package(default_visibility = ["//visibility:public"])
+
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+
+# ─── image_utils: Image Preprocessing Library ─────────────────────────────────
+#
+# A `py_library` is NOT executable — it's a reusable module that other targets
+# can depend on. Bazel tracks exactly which files it contains and verifies that
+# no target imports a library it didn't declare as a dep.
+#
+# deps on @agrobot_pip//numpy and @agrobot_pip//opencv_python_headless:
+#   These are pip packages declared in MODULE.bazel. Bazel downloads them
+#   hermetically rather than using your system numpy/cv2 installation.
+#   This guarantees the same numpy version runs on your Mac AND on the HPC.
+py_library(
+    name = "image_utils",
+    srcs = ["agrobot_perception/utils/image_utils.py"],
+    imports = ["."],  # Adds perception/ to sys.path so `from agrobot_perception...` works.
+    deps = [
+        "@agrobot_pip//numpy",
+        "@agrobot_pip//opencv_python_headless",
+    ],
+)
+
+# ─── dino_sam2_detector: All Detector Implementations ────────────────────────
+#
+# Covers Sprint 2 (DINOv2+SAM2 box-prompt), Sprint 3 (SAM2 AMG + DINOv2
+# scoring), and Sprint 4 (SAM2 semantic point-prompt). All three share the
+# same detect() contract and live in the detectors/ subpackage.
+#
+# Note: sam2 is NOT declared as a Bazel dep because it installs a `configs/`
+# directory that SAM2 locates via its own package path — Bazel's sandbox
+# isolates this differently. sam2 is installed via pip in Dockerfile.dev and
+# used at runtime through the Docker container (same pattern as rclpy).
+py_library(
+    name = "dino_sam2_detector",
+    srcs = [
+        "agrobot_perception/detectors/__init__.py",
+        "agrobot_perception/detectors/dino_sam2_detector.py",
+        "agrobot_perception/detectors/sam2_amg_detector.py",
+        "agrobot_perception/detectors/sam2_semantic_detector.py",
+    ],
+    deps = [
+        ":image_utils",
+        "@agrobot_pip//torch",
+        "@agrobot_pip//torchvision",
+    ],
+    imports = ["."],
+)
+
+# ─── pointcloud_utils: 3D Geometry Library ────────────────────────────────────
+#
+# Pure-numpy sphere fitting + point cloud clipping utilities.
+# No ROS types — testable on Mac without a container.
+py_library(
+    name = "pointcloud_utils",
+    srcs = ["agrobot_perception/utils/pointcloud_utils.py"],
+    imports = ["."],
+    deps = [
+        "@agrobot_pip//numpy",
+    ],
+)
+
+# ─── agrobot_perception_lib: Core Package Library ─────────────────────────────
+#
+# Bundles all Python source files in the package (excluding node entry points).
+# Other packages (e.g., //planning) can depend on this to reuse detection and
+# geometry logic.
+py_library(
+    name = "agrobot_perception_lib",
+    srcs = [
+        "agrobot_perception/__init__.py",
+        "agrobot_perception/utils/__init__.py",
+    ],
+    deps = [":image_utils", ":dino_sam2_detector", ":pointcloud_utils"],
+    imports = ["."],
+)
+
+# ─── tomato_detector: Main ROS 2 Node Binary ─────────────────────────────────
+#
+# A `py_binary` IS executable: `bazel run //perception:tomato_detector`.
+# Bazel creates a self-contained zip-like runfile tree with all deps bundled.
+# When this runs inside the Docker container, it can `import rclpy` because
+# the container has ROS 2 installed — but Bazel managed our custom deps.
+#
+# Note on rclpy/cv_bridge deps:
+#   We do NOT declare rclpy as a Bazel dep here. rclpy is a system package
+#   provided by the Docker container's ROS 2 installation. Declaring it in
+#   Bazel would require building it from source (that's rules_ros2 territory).
+#   Our pragmatic hybrid: Bazel builds OUR code, Docker provides the ROS 2 runtime.
+py_binary(
+    name = "tomato_detector",
+    srcs = ["agrobot_perception/tomato_detector_node.py"],
+    main = "agrobot_perception/tomato_detector_node.py",
+    deps = [
+        ":agrobot_perception_lib",
+        ":dino_sam2_detector",
+        ":image_utils",
+        "@agrobot_pip//numpy",
+        "@agrobot_pip//opencv_python_headless",
+        "@agrobot_pip//torch",
+        "@agrobot_pip//torchvision",
+    ],
+    imports = ["."],
+    # Only build this target on Linux (it requires ROS 2 at runtime).
+    # On your Mac host (outside Docker), `bazel build` is still valid —
+    # Bazel checks deps and syntax — but `bazel run` requires the container.
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+# ─── tomato_spatial: Spatial Localization Node (NODE 2) ───────────────────────
+#
+# Consumes Detection2DArray from tomato_detector + PointCloud2 from RealSense.
+# Fits a RANSAC sphere to each bbox cluster, publishes JSON to /agrobot/tomato_spatial.
+# sensor_msgs_py (used for PointCloud2 parsing) is a ROS 2 package provided by
+# the container — not a Bazel dep, same pattern as rclpy.
+py_binary(
+    name = "tomato_spatial",
+    srcs = ["agrobot_perception/tomato_spatial_node.py"],
+    main = "agrobot_perception/tomato_spatial_node.py",
+    deps = [
+        ":agrobot_perception_lib",
+        ":pointcloud_utils",
+        "@agrobot_pip//numpy",
+        "@agrobot_pip//opencv_python_headless",
+    ],
+    imports = ["."],
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+# ─── tomato_tracker: Persistent Track Manager (NODE 2b) ──────────────────────
+#
+# Nearest-neighbour 3D tracker: consumes /agrobot/tomato_spatial, assigns
+# persistent_id across frames, EMA-smooths centroids, suppresses picked tomatoes.
+# Pure Python (json + math) — no torch, no numpy dependency.
+py_binary(
+    name = "tomato_tracker",
+    srcs = ["agrobot_perception/tomato_tracker_node.py"],
+    main = "agrobot_perception/tomato_tracker_node.py",
+    deps = [":agrobot_perception_lib"],
+    imports = ["."],
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+# ─── qwen_vl: VLM-Guided Pick Selection Node (NODE 3) ────────────────────────
+#
+# Loads Qwen2.5-VL-3B-Instruct (bfloat16, CPU), subscribes to /agrobot/tomato_tracks,
+# shows JPEG crops to the VLM, and publishes /agrobot/pick_target as PoseStamped.
+# transformers and qwen-vl-utils are not Bazel-managed — same pattern as rclpy/sam2.
+py_binary(
+    name = "qwen_vl",
+    srcs = ["agrobot_perception/qwen_vl_node.py"],
+    main = "agrobot_perception/qwen_vl_node.py",
+    deps = [":agrobot_perception_lib"],
+    imports = ["."],
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+# ─── image_utils_test: Unit Tests ────────────────────────────────────────────
+#
+# `py_test` targets run with `bazel test //perception:image_utils_test`.
+# They are hermetically sandboxed: no network access, no filesystem writes
+# outside the test's declared outputs. This guarantees tests are reproducible.
+py_test(
+    name = "image_utils_test",
+    size = "small",     # "small" = must complete in <60s. Enforced by Bazel.
+    main = "tests/test_image_utils.py",
+    srcs = ["tests/test_image_utils.py"],
+    deps = [
+        ":image_utils",
+        "@agrobot_pip//numpy",
+        "@agrobot_pip//opencv_python_headless",
+        "@agrobot_pip//pytest",
+    ],
+    imports = ["."],
+)
