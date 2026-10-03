@@ -1,0 +1,50 @@
+# Share pinned Python 3.12 dependencies between both CV container images
+# Keep torch and torchvision supplied by each Dockerfile outside this list
+# The EVO-X2 image inherits ROCm PyTorch from its pinned AMD base image
+# The x86-64 development image installs CUDA PyTorch for CPU or NVIDIA use
+# Verify imports and inference in each image before accepting these pins
+
+# Preserve NumPy 1.x compatibility with ROS image conversion
+numpy==1.26.4
+opencv-python-headless==4.11.0.86
+Pillow==12.1.1
+scipy==1.15.3
+
+# Supply SAM2 segmentation and its configuration and file utilities
+sam2==1.1.0
+hydra-core==1.3.2
+iopath==0.1.10
+omegaconf==2.3.0
+antlr4-python3-runtime==4.9.3
+portalocker==3.2.0
+
+# Supply the SigLIP and Qwen APIs used by the archived perception nodes
+transformers==4.57.6
+qwen-vl-utils==0.0.11
+sentencepiece==0.2.1
+protobuf==6.33.5
+tokenizers==0.22.2
+safetensors==0.7.0
+av==16.1.0
+Jinja2==3.1.6
+MarkupSafe==3.0.3
+
+# Pin shared dependencies so automatic upgrades do not change the runtime
+huggingface-hub==0.36.0
+hf-xet==1.2.0
+filelock==3.20.3
+fsspec==2026.2.0
+packaging==25.0
+PyYAML==6.0.3
+regex==2026.1.15
+requests==2.32.5
+certifi==2026.2.25
+charset-normalizer==3.4.4
+idna==3.11
+urllib3==2.6.3
+tqdm==4.67.3
+typing-extensions==4.15.0
+
+# Keep source-package builds compatible with the archived colcon setup
+setuptools==79.0.1
+wheel==0.45.1

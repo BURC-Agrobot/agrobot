@@ -1,0 +1,8 @@
+# Send only the runtime recipe inputs to Docker
+**
+!deployment/
+!deployment/docker/
+!deployment/docker/Dockerfile.cv-evox2-amd-rocm
+!deployment/docker/Dockerfile.cv-dev-x86_64-cpu-nvidia
+!deployment/docker/requirements.txt
+!deployment/docker/entrypoint.sh
