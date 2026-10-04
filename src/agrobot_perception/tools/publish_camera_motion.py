@@ -57,8 +57,8 @@ def main() -> None:
     rclpy.init()
     node = _Publisher()
 
-    # Wait briefly for the discovery handshake; without this the first
-    # message can be silently dropped on a fresh node.
+    # Wait briefly for the discovery handshake. Without this the first
+    # message can be silently dropped on a fresh node
     time.sleep(0.5)
 
     msg = Vector3()
@@ -73,7 +73,7 @@ def main() -> None:
         if i < args.repeat - 1:
             time.sleep(0.5)
 
-    # Give the message a moment to leave the buffer before shutdown.
+    # Give the message a moment to leave the buffer before shutdown
     time.sleep(0.2)
     node.destroy_node()
     rclpy.shutdown()

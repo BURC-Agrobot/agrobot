@@ -3,14 +3,14 @@
 <!--
   package.xml — ROS 2 Package Manifest (Format 3)
 
-  This file is the "identity card" of a ROS 2 package. It is read by:
-    - rosdep  : to install system dependencies (`rosdep install -from-paths src`)
-    - colcon  : to determine build order and package type
-    - ros2 pkg: for introspection (`ros2 pkg list`, `ros2 pkg executables`)
-    - rqt     : for plugin discovery
+  This file identifies a ROS 2 package. These tools read it:
+    - rosdep installs system dependencies (`rosdep install -from-paths src`)
+    - colcon determines build order and package type
+    - ros2 pkg inspects packages (`ros2 pkg list`, `ros2 pkg executables`)
+    - rqt discovers plugins
 
-  It lives alongside BUILD.bazel (the Bazel manifest) — they describe the same
-  package to different toolchains. They do not conflict.
+  BUILD.bazel describes the same package for Bazel.
+  The manifests serve different toolchains without conflict
 -->
 <package format="3">
   <name>agrobot_perception</name>

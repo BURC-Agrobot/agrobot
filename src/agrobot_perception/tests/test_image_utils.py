@@ -25,7 +25,7 @@ class TestBgrToRgb:
     def test_channel_order_is_swapped(self):
         """Blue channel (index 0 in BGR) becomes red channel (index 2 in RGB)."""
         bgr = np.zeros((4, 4, 3), dtype=np.uint8)
-        bgr[:, :, 0] = 255  # pure blue in BGR
+        bgr[:, :, 0] = 255  # Pure blue in BGR
         rgb = bgr_to_rgb(bgr)
         assert rgb[:, :, 2].mean() == 255, "Blue channel should map to RGB index 2"
         assert rgb[:, :, 0].mean() == 0, "Red channel (RGB index 0) should be zero"
@@ -39,7 +39,7 @@ class TestBgrToRgb:
 class TestResizeWithAspect:
     def test_output_is_exact_target_size(self):
         """Output must always match target_size exactly."""
-        image = np.zeros((100, 300, 3), dtype=np.uint8)  # wide image
+        image = np.zeros((100, 300, 3), dtype=np.uint8)  # Wide image
         result = resize_with_aspect(image, target_size=(518, 518))
         assert result.shape == (518, 518, 3)
 
@@ -47,14 +47,14 @@ class TestResizeWithAspect:
         """A square input to a square target should fill the canvas completely."""
         image = np.ones((200, 200, 3), dtype=np.uint8) * 128
         result = resize_with_aspect(image, target_size=(100, 100))
-        # No padding: all pixels should be non-zero (mean ≈ 128, not 0).
+        # No padding: all pixels should be non-zero (mean ≈ 128, not 0)
         assert result.mean() > 100
 
     def test_wide_image_has_vertical_padding(self):
         """A 2:1 wide image into a square should have black bars top and bottom."""
         image = np.ones((100, 200, 3), dtype=np.uint8) * 255
         result = resize_with_aspect(image, target_size=(100, 100))
-        # Top row must be black padding.
+        # Top row must be black padding
         assert result[0, 50, 0] == 0, "Top row should be black padding"
 
     def test_preserves_dtype(self):

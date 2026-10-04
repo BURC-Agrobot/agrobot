@@ -2,30 +2,36 @@
 
 - source_pdf: `pdf_docs/agrobot-functions.pdf`
 - date: 2026-10-01
-- goal: Identify fruits and vegetables, check ripeness, choose and follow the
-  best picking paths, and put the harvest in a bin.
+- goal:
+  1. Identify fruits and vegetables.
+  2. Check ripeness.
+  3. Choose the best picking paths.
+  4. Follow these paths.
+  5. Put the harvest in a bin.
 
 ## Semantics
 
-- Edge `A -> B`: B is HOW A is done; A is WHY B is needed.
-- `AND`: all children of the same parent are jointly required.
-- `in_scope: no`: outside the study boundary (left of study start).
-- Every in-scope function is a required function.
+- Edge `A -> B`: Function B describes HOW to do function A.
+  Function A explains WHY the robot needs function B.
+- `AND`: The parent function requires all its child functions together.
+- `in_scope: no`: The function is outside the study boundary, to the left of the
+  study start.
+- The robot must perform every function inside the study boundary.
 
 ## Nodes
 
-- `speed_up_harvesting` | role: why_build_it | in_scope: no | Speed up harvesting | through automatic picking
-- `harvest_produce` | role: main_job | in_scope: yes | Harvest produce | fruits and vegetables; work automatically
-- `choose_produce` | in_scope: yes | Choose produce | by crop type and ripeness
-- `identify_crops` | in_scope: yes | Identify crops | computer vision
-- `check_ripeness` | in_scope: yes | Check ripeness | ripe or unripe
-- `find_produce` | in_scope: yes | Find produce | find where to pick
-- `pick_produce` | in_scope: yes | Pick produce | remove chosen produce
-- `separate_produce` | in_scope: yes | Separate produce | remove from plant
-- `hold_produce` | in_scope: yes | Hold produce | keep it from falling
-- `bin_harvest` | in_scope: yes | Bin harvest | place harvest in the bin
-- `move_produce` | in_scope: yes | Move produce | carry harvest to the bin
-- `drop_off_produce` | in_scope: yes | Drop off produce | put the harvest in the bin
+- `speed_up_harvesting` | role: why_build_it | in_scope: no | Increase harvesting speed | Use automatic picking
+- `harvest_produce` | role: main_job | in_scope: yes | Harvest produce | Harvest fruits and vegetables automatically
+- `choose_produce` | in_scope: yes | Choose produce | Use crop type and ripeness to choose produce
+- `identify_crops` | in_scope: yes | Identify crops | Use computer vision
+- `check_ripeness` | in_scope: yes | Check ripeness | Determine whether produce is ripe or unripe
+- `find_produce` | in_scope: yes | Find produce | Find where to pick
+- `pick_produce` | in_scope: yes | Pick produce | Remove the chosen produce
+- `separate_produce` | in_scope: yes | Separate produce | Remove produce from the plant
+- `hold_produce` | in_scope: yes | Hold produce | Prevent produce from falling
+- `bin_harvest` | in_scope: yes | Place harvest | Put the harvest in the bin
+- `move_produce` | in_scope: yes | Move produce | Carry the harvest to the bin
+- `drop_off_produce` | in_scope: yes | Deposit produce | Put the harvest in the bin
 
 ## Edges
 

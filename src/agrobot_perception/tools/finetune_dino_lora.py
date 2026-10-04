@@ -3,12 +3,14 @@
 finetune_dino_lora.py — LoRA fine-tuning of DINOv2 ViT-B/14 on Laboro Tomato patches.
 
 Why LoRA over full fine-tune:
-  DINOv2 ViT-B/14 has 86M parameters. Fine-tuning all of them on 643 images
-  causes catastrophic forgetting: the universal visual representations that make
-  DINOv2 useful for zero-shot scoring are destroyed. LoRA (Low-Rank Adaptation)
-  freezes all weights and injects trainable low-rank matrices into the Q and V
-  projections of the last N transformer blocks. At rank=8, this adds ~0.7M
-  parameters (0.8% of total) while keeping the frozen backbone intact.
+  DINOv2 ViT-B/14 has 86M parameters.
+  Fine-tuning all parameters on 643 images causes catastrophic forgetting.
+  This destroys the general visual representations that support zero-shot scoring.
+
+  LoRA (Low-Rank Adaptation) freezes all weights.
+  It adds trainable low-rank matrices to the Q and V projections of the last
+  N transformer blocks. At rank=8, it adds ~0.7M parameters (0.8% of the total).
+  The backbone remains frozen.
 
   The scoring function in SAM2AMGDetector and SAM2SemanticDetector is entirely
   cosine similarity in DINOv2 feature space. LoRA adapters shift the feature
@@ -90,7 +92,7 @@ def _select_device() -> torch.device:
     return torch.device("cpu")
 
 
-# ── LoRA implementation ───────────────────────────────────────────────────────
+# LoRA implementation
 
 class LoRALinear(nn.Module):
     """Wraps a frozen nn.Linear with a trainable low-rank adapter.
@@ -124,13 +126,13 @@ def inject_lora(model: nn.Module, rank: int, lora_blocks: int) -> nn.Module:
     """Replace Q and V projections in the last `lora_blocks` transformer blocks with LoRA.
 
     DINOv2 ViT-B has 12 transformer blocks. We adapt only the last N because
-    those encode the most task-specific high-level semantics; early blocks
+    those encode the most task-specific high-level semantics. early blocks
     encode low-level structure that is universal across tasks.
 
-    Critical: freeze ALL backbone parameters first so only the newly created
-    lora_A and lora_B tensors (which default to requires_grad=True) are trained.
-    Without this, every parameter that was already requires_grad=True (the full
-    86M backbone) gets passed to the optimizer — full fine-tuning, not LoRA.
+    Critical: freeze ALL backbone parameters first.
+    Train only the new lora_A and lora_B tensors, which default to requires_grad=True.
+    Otherwise, the optimizer receives every parameter that already has requires_grad=True.
+    This includes the full 86M backbone and causes full fine-tuning instead of LoRA.
     """
     for p in model.parameters():
         p.requires_grad_(False)
@@ -143,7 +145,7 @@ def inject_lora(model: nn.Module, rank: int, lora_blocks: int) -> nn.Module:
     for block in target_blocks:
         # DINOv2's attention module: block.attn.qkv is a single fused Linear (3*D, D)
         # We wrap the entire qkv projection — LoRA on Q+V+K is a superset of Q+V only
-        # but simpler to implement without splitting the fused projection.
+        # but simpler to implement without splitting the fused projection
         if hasattr(block, "attn") and hasattr(block.attn, "qkv"):
             original = block.attn.qkv
             if isinstance(original, nn.Linear):
@@ -160,7 +162,7 @@ def inject_lora(model: nn.Module, rank: int, lora_blocks: int) -> nn.Module:
     return model
 
 
-# ── Data loading ──────────────────────────────────────────────────────────────
+# Data loading
 
 def _yolo_to_pixel(cx: float, cy: float, w: float, h: float,
                    img_w: int, img_h: int) -> tuple[int, int, int, int]:
@@ -229,7 +231,7 @@ def load_records(images_dir: Path, labels_dir: Path, max_images: int = 0) -> lis
     return records
 
 
-# ── NT-Xent loss ──────────────────────────────────────────────────────────────
+# NT-Xent loss
 
 def nt_xent_loss(
     anchors: torch.Tensor,
@@ -272,7 +274,7 @@ def nt_xent_loss(
     return -loss / N
 
 
-# ── Training loop ─────────────────────────────────────────────────────────────
+# Training loop
 
 def train(
     records: list[dict],
@@ -338,9 +340,9 @@ def train(
                 idx = torch.randperm(neg_patches.shape[0])[:max_neg_patches]
                 neg_patches = neg_patches[idx]
 
-            # Augment positives: random dropout of patch features as augmentation.
+            # Augment positives: random dropout of patch features as augmentation
             # Drop 20% of feature dimensions to zero — a simple form of patch augmentation
-            # that creates diverse positive pairs without requiring image-level transforms.
+            # that creates diverse positive pairs without requiring image-level transforms
             dropout_mask = (torch.rand_like(pos_patches) > 0.2).float()
             pos_aug = F.normalize(pos_patches * dropout_mask, dim=1)
             anchors  = F.normalize(pos_patches, dim=1)

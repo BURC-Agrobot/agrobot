@@ -8,12 +8,13 @@ Architecture lineage:
   Sprint 4: All of the following improvements applied to this detector.
 
 Sprint 4 improvements (vs Sprint 3 baseline mAP=0.170):
-  E1 — Coverage-weighted scoring: hard 0.5 threshold replaced with float coverage
-       weights. Boundary patches of circular tomato masks now contribute
-       proportionally instead of being silently excluded.
-  E2 — Multi-prototype query: k-means (k=4) over training patches produces one
-       centroid per ripeness stage (green/yellow/orange-red/occluded). Scoring
-       uses max-over-k instead of a single mean that represents no mode well.
+  E1: Coverage-weighted scoring replaces the hard 0.5 threshold with float
+      coverage weights. Boundary patches of circular tomato masks contribute
+      in proportion to their coverage. The threshold no longer excludes them.
+  E2: A query with multiple prototypes uses k-means (k=4) on training patches.
+      It produces one centroid per ripeness stage: green, yellow, orange-red,
+      and occluded. Scoring uses max-over-k. A single mean represents none of
+      these modes well.
   E7 — Quadrant-crop proposals: optional 4-crop multi-scale AMG recovers small/
        distant tomatoes below the full-image grid resolution threshold (26px at
        pts=20). Enable with use_quadrant_crops=True.
@@ -39,7 +40,7 @@ Interface:
 Runtime [NUCBOX CPU, pts=20]:
   SAM2 encoder:  ~200 ms (amortised over all masks)
   SAM2 decoder:  ~30 ms × N masks (batched)
-  DINOv2:        ~350 ms (once per frame; ~20 ms with MIGraphX GPU)
+  DINOv2:        ~350 ms (once per frame. ~20 ms with MIGraphX GPU)
   Scoring:       ~5 ms
   Total:         ~9–10 s/frame CPU. <300 ms target with MIGraphX (Sprint 4 E8).
 
@@ -110,11 +111,11 @@ class SAM2AMGDetector:
         points_per_side: SAM2 AMG grid density. 8 → 64 masks, 16 → 256 masks.
             Higher = better recall, slower. Use 8 for CPU, 16+ for GPU.
         min_mask_area: Minimum mask area in pixels (518×518 space) to keep.
-            Filters out tiny spurious SAM2 masks.
+            Removes tiny spurious SAM2 masks.
         dino_score_weight: Weight for DINOv2 in fusion. score = α*dino + (1-α)*pred_iou.
-            1.0 = DINOv2 only (default; fusion needs per-dataset tuning).
+            1.0 = DINOv2 only (default. fusion needs per-dataset tuning).
         nms_iou_threshold: IoU threshold for NMS. 0 = disabled (default).
-            Enable with 0.5+ to suppress duplicates; tune per-dataset.
+            Enable with 0.5+ to suppress duplicates. Tune per-dataset.
         negative_weight: Weight for contrastive negative term. 0 = disabled.
             When negative_embedding.pt exists, score = tomato_sim - λ*negative_sim.
     """
@@ -168,14 +169,14 @@ class SAM2AMGDetector:
         self._load_negative_embedding()
 
     def _load_models(self) -> None:
-        # ── DINOv2 — MIGraphX path (NucBox GPU) or PyTorch fallback ──────────
+        # DINOv2 — MIGraphX path (NucBox GPU) or PyTorch fallback
         if self._migraphx_dino_path is not None and self._migraphx_dino_path.exists():
             try:
                 import migraphx  # type: ignore[import]
                 self._migraphx_prog = migraphx.load(str(self._migraphx_dino_path))
                 logger.info("Loaded MIGraphX compiled DINOv2 from %s.", self._migraphx_dino_path)
-                # Still need PyTorch DINOv2 for query embedding builds; for inference
-                # the MIGraphX path short-circuits the PyTorch forward in detect().
+                # Still need PyTorch DINOv2 for query embedding builds. For inference
+                # the MIGraphX path short-circuits the PyTorch forward in detect()
             except Exception as exc:
                 logger.warning("MIGraphX load failed (%s). Falling back to PyTorch DINOv2.", exc)
                 self._migraphx_prog = None
@@ -201,7 +202,7 @@ class SAM2AMGDetector:
         self._dino.eval().to(self._device)
         logger.info("DINOv2 loaded.")
 
-        # ── SAM2 AMG ──────────────────────────────────────────────────────────
+        # SAM2 AMG
         if not self._sam2_ckpt.exists():
             logger.warning(
                 "SAM2 checkpoint not found at %s. "
@@ -218,7 +219,7 @@ class SAM2AMGDetector:
                 _DEFAULT_SAM2_CFG, str(self._sam2_ckpt), device=self._device
             )
 
-            # Load fine-tuned decoder weights if present alongside base checkpoint.
+            # Load fine-tuned decoder weights if present alongside base checkpoint
             finetuned = self._sam2_ckpt.parent / "sam2_tomato_finetuned.pt"
             if finetuned.exists():
                 state = torch.load(str(finetuned), map_location=self._device)
@@ -228,12 +229,12 @@ class SAM2AMGDetector:
             self._amg = SAM2AutomaticMaskGenerator(
                 model=sam2_model,
                 points_per_side=self._points_per_side,
-                # Keep only confident, stable masks to reduce noise.
+                # Keep only confident, stable masks to reduce noise
                 pred_iou_thresh=0.70,
                 stability_score_thresh=0.80,
-                # Crop-based multi-scale augmentation — disable for speed on CPU.
+                # Crop-based multi-scale augmentation — disable for speed on CPU
                 crop_n_layers=0,
-                # Post-process: remove masks with <min_mask_area pixels.
+                # Post-process: remove masks with <min_mask_area pixels
                 min_mask_region_area=self._min_mask_area,
             )
             logger.info(
@@ -251,8 +252,8 @@ class SAM2AMGDetector:
                 # Single mean embedding (768,) — normalise and keep as-is
                 self._query_embedding = F.normalize(q, dim=0)
             else:
-                # Multi-prototype (k, 768) — each row already normalised by builder;
-                # re-normalise defensively in case the file was built without it.
+                # The builder normalizes each row in the (k, 768) prototype tensor
+                # Normalize again in case the file lacks this normalization
                 self._query_embedding = F.normalize(q, dim=1)
             logger.info(
                 "Loaded query embedding from %s (shape=%s).", query_path, tuple(self._query_embedding.shape)
@@ -270,7 +271,7 @@ class SAM2AMGDetector:
         neg_path = self._negative_embedding_path or (self._repo_root / _DEFAULT_NEGATIVE_EMB)
         if neg_path.exists():
             q = torch.load(str(neg_path), map_location=self._device).float()
-            # dim=1 for (k, 768) multi-prototype tensors; dim=0 for (768,) single vector.
+            # dim=1 for (k, 768) multi-prototype tensors. dim=0 for (768,) single vector
             self._negative_embedding = F.normalize(q, dim=0 if q.dim() == 1 else 1)
             logger.info(
                 "Loaded negative embedding from %s (shape=%s, contrastive λ=%.2f).",
@@ -295,14 +296,14 @@ class SAM2AMGDetector:
         if self._amg is None or self._query_embedding is None or self._dino is None:
             return []
 
-        # ── Step 1: Reconstruct uint8 RGB image for SAM2 AMG ─────────────────
-        # SAM2 AMG needs a uint8 HWC image, not the normalized CHW tensor.
+        # Step 1: Reconstruct uint8 RGB image for SAM2 AMG
+        # SAM2 AMG needs a uint8 HWC image, not the normalized CHW tensor
         rgb_float = preprocessed_chw * _IMAGENET_STD[:, None, None] + _IMAGENET_MEAN[:, None, None]
         rgb_uint8 = (np.clip(rgb_float, 0, 1) * 255).astype(np.uint8)
         rgb_hwc = np.transpose(rgb_uint8, (1, 2, 0))  # CHW → HWC
 
-        # ── Step 2: DINOv2 forward — patch tokens for scoring ─────────────────
-        # Use MIGraphX compiled path on NucBox when available; PyTorch otherwise.
+        # Step 2: DINOv2 forward — patch tokens for scoring
+        # Use MIGraphX compiled path on NucBox when available. PyTorch otherwise
         if self._migraphx_prog is not None:
             try:
                 import migraphx  # type: ignore[import]
@@ -312,7 +313,7 @@ class SAM2AMGDetector:
                 patch_norms = torch.from_numpy(np.array(result[0])).squeeze(0).to(self._device)
             except Exception as exc:
                 logger.debug("MIGraphX forward failed (%s). Falling back to PyTorch.", exc)
-                self._migraphx_prog = None  # disable for subsequent frames
+                self._migraphx_prog = None  # Disable for subsequent frames
                 tensor = torch.from_numpy(preprocessed_chw).unsqueeze(0).to(self._device)
                 with torch.no_grad():
                     features = self._dino.forward_features(tensor)
@@ -325,8 +326,8 @@ class SAM2AMGDetector:
             patch_tokens = features["x_norm_patchtokens"].squeeze(0)  # (1369, 768)
             patch_norms  = F.normalize(patch_tokens, dim=1)            # L2-normalised
 
-        # ── Step 3: SAM2 AMG — generate pixel-precise mask proposals ──────────
-        # generate() is already @torch.no_grad internally.
+        # Step 3: SAM2 AMG — generate pixel-precise mask proposals
+        # generate() is already @torch.no_grad internally
         try:
             masks_data = self._amg.generate(rgb_hwc)
         except Exception as exc:
@@ -337,7 +338,7 @@ class SAM2AMGDetector:
             masks_data = []
 
         # Optionally augment with quadrant-crop proposals to catch small/distant
-        # tomatoes that fall below the full-image grid resolution threshold.
+        # tomatoes that fall below the full-image grid resolution threshold
         if self._use_quadrant_crops:
             crop_masks = self._generate_quadrant_masks(rgb_hwc)
             masks_data = masks_data + crop_masks
@@ -349,10 +350,10 @@ class SAM2AMGDetector:
         if not masks_data:
             return []
 
-        # ── Step 4: Score each mask with DINOv2 patch similarity ──────────────
+        # Step 4: Score each mask with DINOv2 patch similarity
         detections = []
         for mask_info in masks_data:
-            seg = mask_info["segmentation"]   # bool (518, 518)
+            seg = mask_info["segmentation"]   # Bool (518, 518)
             bbox_xywh = mask_info["bbox"]     # [x, y, w, h] in 518×518 space
 
             if seg.sum() < self._min_mask_area:
@@ -362,7 +363,7 @@ class SAM2AMGDetector:
             # weights. Each cell ∈ [0,1] = fraction of the 14×14 block inside
             # the mask. Using float weights (not a hard 0.5 threshold) preserves
             # boundary patches of circular tomatoes that would otherwise be
-            # excluded, restoring the full mask footprint in the scoring region.
+            # excluded, restoring the full mask footprint in the scoring region
             coverage = self._mask_to_patch_coverage(seg)  # (37, 37) float32
             weights = coverage.reshape(-1)                 # (1369,) float32
 
@@ -371,11 +372,11 @@ class SAM2AMGDetector:
 
             weights = weights.to(self._device)
 
-            # Coverage-weighted cosine similarity.
+            # Coverage-weighted cosine similarity
             # Single prototype (768,):  score = Σ w_i·cos(f_i, q) / Σ w_i
             # Multi-prototype (k, 768): score = max_k [ Σ w_i·cos(f_i, qₖ) / Σ w_i ]
             # The max-over-k picks the ripeness mode the mask best matches, so
-            # green tomatoes are no longer penalised against a red-biased centroid.
+            # green tomatoes are no longer penalised against a red-biased centroid
             if self._query_embedding.dim() == 1:
                 sims = patch_norms @ self._query_embedding       # (1369,)
                 tomato_sim = float((sims * weights).sum() / weights.sum())
@@ -384,7 +385,7 @@ class SAM2AMGDetector:
                 per_proto = (sims_k * weights.unsqueeze(1)).sum(dim=0) / weights.sum()  # (k,)
                 tomato_sim = float(per_proto.max())
 
-            # Contrastive: coverage-weighted negative similarity.
+            # Contrastive: coverage-weighted negative similarity
             neg_sim = 0.0
             if self._negative_embedding is not None and self._negative_weight > 0:
                 if self._negative_embedding.dim() == 1:
@@ -399,7 +400,7 @@ class SAM2AMGDetector:
             else:
                 dino_sim = tomato_sim
 
-            # Fuse with SAM2 predicted_iou when available (mask shape quality).
+            # Fuse with SAM2 predicted_iou when available (mask shape quality)
             pred_iou_raw = mask_info.get("predicted_iou") or mask_info.get("pred_iou")
             pred_iou_val = float(pred_iou_raw) if isinstance(pred_iou_raw, (int, float)) else 0.0
             if isinstance(pred_iou_raw, (int, float)):
@@ -411,15 +412,15 @@ class SAM2AMGDetector:
             if score < self._conf_threshold:
                 continue
 
-            # Box from SAM2's own bbox (pixel-precise, from mask contour).
+            # Box from SAM2's own bbox (pixel-precise, from mask contour)
             x, y, w, h = bbox_xywh
             x1, y1, x2, y2 = float(x), float(y), float(x + w), float(y + h)
 
-            # Attach raw scoring components so downstream wrappers (TTA, SigLIP
-            # rescoring, learned MLP fusion in Phase 2) can re-fuse without
-            # recomputing the heavy DINOv2/SAM2 forwards. Existing consumers
-            # (visualize.py, metrics.py) read only box/score/label/mask and
-            # ignore the extra keys.
+            # Attach raw scores so downstream wrappers can repeat score fusion
+            # This avoids another DINOv2 or SAM2 forward pass
+            # Wrappers include TTA, SigLIP rescoring, and learned MLP fusion in Phase 2
+            # visualize.py and metrics.py read only box, score, label, and mask
+            # These consumers ignore the additional keys
             detections.append({
                 "box": [x1, y1, x2, y2],
                 "score": score,
@@ -431,29 +432,30 @@ class SAM2AMGDetector:
                 "pred_iou": pred_iou_val,
             })
 
-        # NMS to remove overlapping detections for the same tomato.
+        # NMS to remove overlapping detections for the same tomato
         if self._nms_iou_threshold > 0 and detections:
             detections = self._nms(detections)
 
-        # Sort by score descending, cap at max_detections.
+        # Sort by score descending, cap at max_detections
         detections.sort(key=lambda d: d["score"], reverse=True)
         return detections[: self._max_detections]
 
     def _generate_quadrant_masks(self, rgb_hwc: np.ndarray) -> list[dict]:
         """Run AMG on 4 overlapping quadrant crops and reproject detections.
 
-        Why this helps: at pts=20 (full image 518×518) the grid spacing is
-        518/20 = 26px. A tomato smaller than 26px in diameter gets no grid point
-        inside it and is never proposed. Splitting the image into quadrants with
-        25% overlap and running AMG at the same pts density effectively halves
-        the minimum detectable object size without changing the per-image AMG params.
+        At pts=20 in a 518×518 image, grid spacing is 518/20 = 26 px.
+        A tomato with diameter below 26 px has no grid point inside it.
+        AMG therefore never proposes it.
+        Quadrants with 25% overlap retain the same point density.
+        This effectively halves the minimum detectable object size without
+        changing the AMG parameters for each image.
 
-        Each quadrant crop covers 50% of the image in each dimension with
-        `crop_overlap` (default 25%) bleed into adjacent quadrants. Detections
-        from sub-crops are reprojected to full 518×518 pixel space and
-        deduplicated by the caller's NMS.
+        Each quadrant covers 50% of each image dimension.
+        `crop_overlap`, which defaults to 25%, extends the crop into adjacent
+        quadrants. Project crop detections into the full 518×518 image space.
+        The caller's non-maximum suppression (NMS) removes duplicates.
         """
-        H, W = rgb_hwc.shape[:2]  # both 518
+        H, W = rgb_hwc.shape[:2]  # Both 518
         half_h = H // 2
         half_w = W // 2
         overlap_h = int(half_h * self._crop_overlap)
@@ -493,7 +495,7 @@ class SAM2AMGDetector:
                 ys, xs = np.where(seg_crop)
                 if xs.size == 0:
                     continue
-                # Scale back to crop pixel coords, then offset to full image
+                # Convert to crop pixel coordinates, then offset to full image
                 full_xs = np.clip((xs * scale_x + x1c).astype(np.int32), 0, W - 1)
                 full_ys = np.clip((ys * scale_y + y1c).astype(np.int32), 0, H - 1)
                 seg_full[full_ys, full_xs] = True
@@ -539,13 +541,12 @@ class SAM2AMGDetector:
     def _mask_to_patch_coverage(seg: np.ndarray) -> torch.Tensor:
         """Downsample a 518×518 bool mask to a (37×37) float coverage map.
 
-        Each cell holds the fraction [0,1] of its 14×14 pixel block that is
-        inside the mask. Retaining fractional coverage rather than hard-
-        thresholding at 0.5 prevents boundary patches of circular tomato masks
-        from being silently excluded — at 37×37 resolution most perimeter
-        patches of a round object have 20–50% coverage and would be zeroed by
-        a hard threshold, shrinking the effective scoring region to ~60% of the
-        mask interior.
+        Each cell holds the fraction [0,1] of its 14×14 pixel block inside
+        the mask. Retain fractional coverage to include boundary patches of
+        circular tomato masks. At 37×37 resolution, most perimeter patches
+        of a round object have 20–50% coverage.
+        A hard 0.5 threshold would set these patches to zero.
+        That threshold would reduce the scoring region to ~60% of the mask interior.
         """
         seg_f = seg[:_DINO_GRID * _DINO_PATCH_SIZE, :_DINO_GRID * _DINO_PATCH_SIZE].astype(np.float32)
         blocks = seg_f.reshape(_DINO_GRID, _DINO_PATCH_SIZE, _DINO_GRID, _DINO_PATCH_SIZE)

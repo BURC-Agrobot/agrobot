@@ -25,7 +25,7 @@ bool MotionState::apply(Event event)
     // Require stop confirmation from every active phase
     state_ = State::stopping;
   } else if (state_ == State::stopping && event == Event::confirmed) {
-    // Release ownership only after the stop is confirmed
+    // Release ownership only after stop confirmation
     state_ = State::idle;
   } else if (state_ == State::stopping && event == Event::stop_failed) {
     // Latch an unconfirmed stop so another request cannot begin
@@ -93,9 +93,9 @@ Positions target_positions(const action::MoveJoints::Goal & goal)
 // Require the expected groups and usable limits before motion starts
 bool valid_model(const moveit::core::RobotModel & model)
 {
-  // Check both groups so the complete robot contract is covered
+  // Check both groups to cover the complete robot contract
   for (const auto group : {Group::arm, Group::rail}) {
-    // Look up the group in the shared robot model
+    // Find the group in the shared robot model
     const auto * joint_group = model.getJointModelGroup(group == Group::arm ? "arm" : "rail");
     // Reject missing groups or mismatched controller joint ordering
     if (joint_group == nullptr || joint_group->getVariableNames() != joint_names(group)) {
@@ -178,7 +178,7 @@ bool read_positions(const sensor_msgs::msg::JointState & message, Positions & po
   }
   // Stage all joints so rejected feedback leaves trusted data unchanged
   Positions sample;
-  // Check both groups so the complete robot contract is covered
+  // Check both groups to cover the complete robot contract
   for (const auto group : {Group::arm, Group::rail}) {
     // Select required joint names independently of message ordering
     const auto & names = joint_names(group);
@@ -245,7 +245,7 @@ bool mock_hardware(const controller_manager_msgs::srv::ListHardwareComponents::R
 // Require both controllers to own exactly their position interfaces
 bool controllers_ready(const controller_manager_msgs::srv::ListControllers::Response & response)
 {
-  // Check both groups so the complete robot contract is covered
+  // Check both groups to cover the complete robot contract
   for (const auto group : {Group::arm, Group::rail}) {
     // Select the controller belonging to this joint group
     const std::string controller_name = group == Group::arm ? "arm_controller" : "rail_controller";

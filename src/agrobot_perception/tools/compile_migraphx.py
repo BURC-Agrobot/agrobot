@@ -76,7 +76,7 @@ def compile_onnx(
     """Compile an ONNX model to a MIGraphX binary (.mxr).
 
     The .mxr file contains GPU-native code for the target device. Compilation
-    takes 30–120 seconds (first time); subsequent loads take <1 second via
+    takes 30–120 seconds (first time). Subsequent loads take <1 second via
     migraphx.load().
 
     fp16: Enables FP16 quantisation. Halves memory bandwidth and often doubles

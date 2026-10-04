@@ -2,26 +2,30 @@
 mask_refine.py — Second-pass SAM2 mask refinement for surviving detections.
 
 Why this exists (Phase 2.3):
-  SAM2 AMG places point prompts on a fixed grid. For tomatoes whose centre
-  falls between grid points, the AMG-generated mask boundary is offset from
-  the actual object boundary by up to half a grid cell (~9 px at pts=28).
-  That offset costs IoU vs GT — a tomato detection with a 5-pixel boundary
-  offset routinely sits at IoU ~0.45 vs its GT box and gets counted as a
-  false positive at the IoU=0.5 threshold.
+  SAM2 AMG places point prompts on a fixed grid.
+  Tomato centers can fall between grid points.
+  Their mask boundaries can differ from the object boundaries by up to half
+  a grid cell (~9 px at pts=28).
 
-  This wrapper takes each detection that survived the detector's own
-  filter+NMS+cap and re-runs SAM2 with the detection's centroid as a single
-  positive point prompt. SAM2's mask decoder is symmetric in the prompt — a
-  centroid prompt produces a mask centred on the actual object, not on the
-  nearest grid cell. We then re-score the refined mask with the same
-  coverage-weighted DINOv2 formula and only keep the refinement when it
-  improves the score AND has high enough IoU with the original.
+  A 5-pixel boundary offset routinely gives IoU ~0.45 against the GT box.
+  The IoU=0.5 threshold then counts that detection as a false positive.
+
+  This wrapper processes each detection after the detector's filter, NMS,
+  and count limit. It runs SAM2 again with the detection centroid as one
+  positive point prompt. The SAM2 mask decoder is symmetric in the prompt.
+  A centroid prompt centers the mask on the object instead of the nearest
+  grid cell.
+
+  Score the refined mask with the same coverage-weighted DINOv2 formula.
+  Keep the refinement only if both conditions hold:
+    1. The score improves.
+    2. IoU with the original box is high enough.
 
 Why we re-score:
-  Refining without re-scoring would let SAM2 hallucinate a "better" mask of a
-  non-tomato object (e.g. a leaf cluster nearby) and silently replace a
-  correct detection with a wrong one. Requiring score improvement uses the
-  detector's own semantic check as a guardrail.
+  Refinement without rescoring would let SAM2 replace a correct detection
+  with an incorrect mask of another object, such as nearby leaves.
+  Requiring score improvement applies the detector's semantic check to prevent
+  this replacement.
 
 Architecture coupling:
   This wrapper specifically targets SAM2AMGDetector because it reuses the
@@ -77,10 +81,10 @@ class MaskRefineWrapper:
         base: a SAM2AMGDetector instance (must expose _amg, _dino, _query_embedding,
               _negative_embedding, _negative_weight, _dino_score_weight, _device).
         min_iou_with_original: minimum IoU between refined and original box to
-            accept the refinement. Lower allows more drift; higher rejects useful
+            accept the refinement. Lower allows more drift. Higher rejects useful
             refinements that shift the box significantly.
         min_score_delta: minimum (refined_score - original_score) to accept.
-            Use 0.0 to accept any improvement; positive values reject ties.
+            Use 0.0 to accept any improvement. positive values reject ties.
         only_borderline: only refine detections with original score within this
             margin of the confidence threshold. Cheap (skips the obviously-good
             detections) but limits ceiling. Set to a large value to refine all.
@@ -98,7 +102,7 @@ class MaskRefineWrapper:
         self._min_score_delta = min_score_delta
         self._borderline_margin = only_borderline
 
-        # Validate that base exposes the expected internals.
+        # Validate that base exposes the expected internals
         for attr in ("_amg", "_dino", "_query_embedding", "_device",
                      "_dino_score_weight", "_conf_threshold"):
             if not hasattr(base, attr):
@@ -116,7 +120,7 @@ class MaskRefineWrapper:
         return np.transpose(rgb_uint8, (1, 2, 0))
 
     def _dino_forward(self, preprocessed_chw: np.ndarray) -> torch.Tensor:
-        """Single DINOv2 forward; cached patch_norms reused across all refinements."""
+        """Run DINOv2 once. Reuse cached patch_norms for all refinements."""
         tensor = torch.from_numpy(preprocessed_chw).unsqueeze(0).to(self._base._device)
         with torch.no_grad():
             features = self._base._dino.forward_features(tensor)
@@ -163,7 +167,7 @@ class MaskRefineWrapper:
         patch_norms: torch.Tensor,
         predictor,
     ) -> Optional[dict]:
-        """Re-prompt SAM2 with detection centroid; return improved det or None."""
+        """Prompt SAM2 again with the detection centroid. Return an improved detection or None."""
         x1, y1, x2, y2 = det["box"]
         cx, cy = (x1 + x2) / 2.0, (y1 + y2) / 2.0
         try:
@@ -176,12 +180,12 @@ class MaskRefineWrapper:
             logger.debug("SAM2 refine failed at (%.1f,%.1f): %s", cx, cy, exc)
             return None
 
-        # Choose mask with highest SAM2 predicted_iou.
+        # Choose mask with highest SAM2 predicted_iou
         best = int(np.argmax(sam_scores_np))
         seg = masks_np[best].astype(bool)
         pred_iou = float(sam_scores_np[best])
 
-        if seg.sum() < 50:  # tiny mask = SAM2 prompt landed off-target
+        if seg.sum() < 50:  # Tiny mask = SAM2 prompt landed off-target
             return None
 
         rows = np.where(seg.any(axis=1))[0]
@@ -190,7 +194,7 @@ class MaskRefineWrapper:
             return None
         new_box = [float(cols[0]), float(rows[0]), float(cols[-1]), float(rows[-1])]
 
-        # IoU vs original — don't accept refinements that drift to a different object.
+        # IoU vs original — don't accept refinements that drift to a different object
         iou = _box_iou(new_box, [x1, y1, x2, y2])
         if iou < self._min_iou:
             return None
@@ -200,7 +204,7 @@ class MaskRefineWrapper:
         new_score = alpha * dino_sim + (1.0 - alpha) * pred_iou
 
         if new_score < det.get("dino_sim", det["score"]) + self._min_score_delta:
-            # Refinement did not improve the dino-side score; keep original.
+            # Refinement did not improve the dino-side score. Keep original
             return None
 
         return {
@@ -220,8 +224,8 @@ class MaskRefineWrapper:
         if not dets:
             return dets
 
-        # Reuse the AMG's already-loaded image predictor for point-prompt mode.
-        # SAM2AutomaticMaskGenerator stores it as self.predictor.
+        # Reuse the AMG's already-loaded image predictor for point-prompt mode
+        # SAM2AutomaticMaskGenerator stores it as self.predictor
         amg = self._base._amg
         predictor = getattr(amg, "predictor", None)
         if predictor is None:
@@ -240,7 +244,7 @@ class MaskRefineWrapper:
         out: list[dict] = []
         for det in dets:
             if (det["score"] - self._base._conf_threshold) > self._borderline_margin:
-                # Far above threshold → cheap-skip refinement.
+                # Far above threshold → cheap-skip refinement
                 out.append(det)
                 continue
             refined = self._refine_one(rgb_hwc, det, patch_norms, predictor)

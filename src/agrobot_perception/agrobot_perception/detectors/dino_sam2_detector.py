@@ -62,29 +62,29 @@ import torch.nn.functional as F
 
 logger = logging.getLogger(__name__)
 
-# Path to SAM2 checkpoint relative to the repo root.
-# Resolved at runtime from the AGROBOT_ROOT env var, then falls back to
-# a path relative to this file (works inside the bind-mounted container).
+# Path to SAM2 checkpoint relative to the repository root
+# At runtime, use AGROBOT_ROOT to resolve the path
+# Otherwise, use a path relative to this file in the mounted container
 _DEFAULT_SAM2_CKPT = "models/sam2/sam2.1_hiera_small.pt"
-# Config path is relative to the sam2 package root (not the repo root).
-# build_sam2() resolves this via Hydra's pkg://sam2 search path.
+# Config path is relative to the sam2 package root (not the repository root)
+# build_sam2() resolves this via Hydra's pkg://sam2 search path
 _DEFAULT_SAM2_CFG = "configs/sam2.1/sam2.1_hiera_s.yaml"
-# Data-driven query embedding built by perception/tools/build_query_embedding.py.
-# When present, replaces the hardcoded RGB prior below.
+# Data-driven query embedding built by perception/tools/build_query_embedding.py
+# When present, replaces the hardcoded RGB prior below
 _DEFAULT_QUERY_EMBEDDING = "models/query_embedding.pt"
 
-# DINOv2 ViT-B/14: patch_size=14, embed_dim=768, image_size=518 → 37×37 patches.
+# DINOv2 ViT-B/14: patch_size=14, embed_dim=768, image_size=518 → 37×37 patches
 _DINO_MODEL_NAME = "dinov2_vitb14"
 _DINO_PATCH_SIZE = 14
 _DINO_INPUT_SIZE = 518
 _DINO_GRID = _DINO_INPUT_SIZE // _DINO_PATCH_SIZE  # 37
 
-# Tomato appearance prior: tomatoes are round, red-to-orange objects.
-# This RGB prototype is used to build the initial query embedding.
+# Tomato appearance prior: tomatoes are round, red-to-orange objects
+# Use this RGB prototype to build the initial query embedding
 # Sprint 2: hardcoded prior. Sprint 3: replace with mean embedding from
-# Laboro Tomato training set after fine-tuning.
+# Laboro Tomato training set after fine-tuning
 _TOMATO_RGB_PRIOR = np.array([
-    [200, 50, 50],    # ripe red
+    [200, 50, 50],    # Ripe red
     [220, 80, 20],    # orange-red
     [180, 40, 40],    # deep red
     [210, 100, 30],   # orange
@@ -94,13 +94,13 @@ _TOMATO_RGB_PRIOR = np.array([
 def _select_device() -> torch.device:
     """Select the best available inference device.
 
-    MPS is checked first so Mac host runs (outside Docker) use the GPU.
-    Inside the Docker container on Mac, MPS is unavailable and CPU is used.
+    Check MPS first so runs on the Mac host, outside Docker, use the GPU.
+    In a Docker container on Mac, MPS is unavailable. Use the CPU there.
 
     Set AGROBOT_FORCE_CPU=1 to bypass GPU selection entirely.
-    Required on NucBox (gfx1151/Strix Halo) until Sprint 3 MIGraphX path is
-    in place — the pre-built ROCm 6.4 PyTorch wheels target discrete RDNA 3
-    (gfx1100) and fault on gfx1151 unified memory.
+    NucBox (gfx1151/Strix Halo) requires this setting until Sprint 3 supplies
+    the MIGraphX path. The prebuilt ROCm 6.4 PyTorch wheels target discrete
+    RDNA 3 (gfx1100). They fault on gfx1151 unified memory.
     """
     if os.environ.get("AGROBOT_FORCE_CPU", "0") == "1":
         return torch.device("cpu")
@@ -112,13 +112,14 @@ def _select_device() -> torch.device:
 
 
 def _find_repo_root() -> Path:
-    """Walk up from this file to find the repo root (contains MODULE.bazel)."""
+    """Search this file’s parent directories to find the repository root (contains MODULE.bazel)."""
     candidate = Path(__file__).resolve()
     for _ in range(10):
         candidate = candidate.parent
         if (candidate / "MODULE.bazel").exists():
             return candidate
-    # Fallback: use AGROBOT_ROOT env var if set (always correct inside Docker).
+    # Otherwise, use AGROBOT_ROOT if set
+    # This value is always correct inside Docker
     env_root = os.environ.get("AGROBOT_ROOT")
     if env_root:
         return Path(env_root)
@@ -174,13 +175,13 @@ class DINOv2SAM2Detector:
             self._conf_threshold,
         )
 
-    # ── Model Loading ──────────────────────────────────────────────────────────
+    # Model Loading
 
     def _load_models(self) -> None:
         """Load DINOv2 via torch.hub and SAM2 from local checkpoint."""
         logger.info("Loading DINOv2 (%s) via torch.hub...", _DINO_MODEL_NAME)
-        # torch.hub downloads to ~/.cache/torch/hub/ on first call.
-        # Subsequent calls use the cached download.
+        # torch.hub downloads to ~/.cache/torch/hub/ on first call
+        # Subsequent calls use the cached download
         self._dino = torch.hub.load(
             "facebookresearch/dinov2",
             _DINO_MODEL_NAME,
@@ -210,13 +211,13 @@ class DINOv2SAM2Detector:
             from sam2.sam2_image_predictor import SAM2ImagePredictor
 
             # build_sam2 resolves cfg via Hydra pkg://sam2 search path —
-            # pass only the relative path within the sam2 package, not absolute.
+            # pass only the relative path within the sam2 package, not absolute
             sam2_model = build_sam2(_DEFAULT_SAM2_CFG, str(self._sam2_ckpt), device=self._device)
 
             # If a fine-tuned state dict exists alongside the base checkpoint
-            # (same path with _finetuned suffix, or explicit override), load it.
+            # (same path with _finetuned suffix, or explicit override), load it
             # This keeps the loading interface clean — base weights always load
-            # first so the model is valid even if fine-tuning was partial.
+            # first so the model is valid even if fine-tuning was partial
             finetuned_path = self._sam2_ckpt.parent / "sam2_tomato_finetuned.pt"
             if finetuned_path.exists():
                 state_dict = torch.load(str(finetuned_path), map_location=self._device)
@@ -238,7 +239,7 @@ class DINOv2SAM2Detector:
           1. Load from models/query_embedding.pt if present (built by
              perception/tools/build_query_embedding.py from Laboro Tomato
              training patches). This gives data-driven, colour-agnostic features.
-          2. Fall back to the hardcoded red/orange RGB prior (zero-shot baseline).
+          2. Otherwise, use the hardcoded red/orange RGB prior (zero-shot baseline).
 
         The file-based embedding replaces the prior permanently once generated.
         Sprint 3: recompute after SAM2 fine-tuning for further improvement.
@@ -261,7 +262,7 @@ class DINOv2SAM2Detector:
         embeddings = []
         with torch.no_grad():
             for rgb in _TOMATO_RGB_PRIOR:
-                # Build a 518×518 patch filled with the tomato colour.
+                # Build a 518×518 patch filled with the tomato colour
                 patch = np.full(
                     (_DINO_INPUT_SIZE, _DINO_INPUT_SIZE, 3), rgb, dtype=np.float32
                 )
@@ -270,17 +271,17 @@ class DINOv2SAM2Detector:
                     np.transpose(patch, (2, 0, 1))
                 ).unsqueeze(0).to(self._device)
 
-                # Extract CLS token as the colour's global embedding.
+                # Extract CLS token as the colour's global embedding
                 features = self._dino.forward_features(tensor)
                 cls_token = features["x_norm_clstoken"]  # (1, 768)
                 embeddings.append(cls_token)
 
-        # Mean of colour priors → (768,) query vector, L2-normalised.
+        # Mean of colour priors → (768,) query vector, L2-normalised
         query = torch.cat(embeddings, dim=0).mean(dim=0)
         self._query_embedding = F.normalize(query, dim=0)
         logger.debug("Tomato query embedding built. shape=%s", self._query_embedding.shape)
 
-    # ── Inference ─────────────────────────────────────────────────────────────
+    # Inference
 
     def detect(self, preprocessed_chw: np.ndarray) -> list[dict]:
         """Detect tomatoes in a preprocessed frame.
@@ -306,18 +307,18 @@ class DINOv2SAM2Detector:
         patch_tokens = features["x_norm_patchtokens"]  # (1, 1369, 768)
         patch_tokens = patch_tokens.squeeze(0)          # (1369, 768)
 
-        # Cosine similarity between each patch and the tomato query.
+        # Cosine similarity between each patch and the tomato query
         patch_norms = F.normalize(patch_tokens, dim=1)  # (1369, 768)
         similarity = (patch_norms @ self._query_embedding).cpu().numpy()  # (1369,)
 
-        # Reshape to spatial grid (37, 37).
+        # Reshape to spatial grid (37, 37)
         sim_map = similarity.reshape(_DINO_GRID, _DINO_GRID)
 
         proposals = self._similarity_map_to_boxes(sim_map)
         if not proposals:
             return []
 
-        # Scale proposals from DINOv2 grid coords (37×37) to image coords (518×518).
+        # Scale proposals from the 37×37 DINOv2 grid to the 518×518 image
         scale = _DINO_PATCH_SIZE
         scaled_proposals = []
         for box, score in proposals:
@@ -344,8 +345,9 @@ class DINOv2SAM2Detector:
     ) -> list[tuple[list[int], float]]:
         """Convert a (37, 37) similarity map to bounding box proposals.
 
-        Thresholds the map, finds connected components, and returns one box
-        per component with score = mean similarity of patches in that region.
+        Apply the threshold to the map. Find connected components.
+        Return one box per component.
+        The score is the mean similarity of patches in that region.
 
         Returns:
             List of ([gx1, gy1, gx2, gy2], score) in grid coordinates.
@@ -359,7 +361,7 @@ class DINOv2SAM2Detector:
         )
 
         proposals = []
-        for label_id in range(1, n_labels):  # skip background (0)
+        for label_id in range(1, n_labels):  # Skip background (0)
             mask = labels == label_id
             component_scores = sim_map[mask]
             mean_score = float(component_scores.mean())
@@ -367,7 +369,7 @@ class DINOv2SAM2Detector:
             if mean_score < self._conf_threshold:
                 continue
 
-            # stats columns: LEFT, TOP, WIDTH, HEIGHT, AREA
+            # Stats columns: LEFT, TOP, WIDTH, HEIGHT, AREA
             x, y, w, h = (
                 stats[label_id, cv2.CC_STAT_LEFT],
                 stats[label_id, cv2.CC_STAT_TOP],
@@ -397,8 +399,8 @@ class DINOv2SAM2Detector:
         Returns:
             List of detection dicts with refined boxes and masks.
         """
-        # SAM2 needs the original uint8 RGB image.
-        # We reverse the ImageNet normalization to recover approximate pixel values.
+        # SAM2 needs the original uint8 RGB image
+        # We reverse the ImageNet normalization to recover approximate pixel values
         mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)[:, None, None]
         std = np.array([0.229, 0.224, 0.225], dtype=np.float32)[:, None, None]
         rgb_float = preprocessed_chw * std + mean
@@ -428,7 +430,7 @@ class DINOv2SAM2Detector:
 
             best_mask = masks[0].astype(np.uint8)  # (H, W) binary
 
-            # Refine bounding box from mask contour.
+            # Refine bounding box from mask contour
             contours, _ = cv2.findContours(
                 best_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
             )
@@ -439,7 +441,7 @@ class DINOv2SAM2Detector:
             else:
                 refined_box = [int(v) for v in box_coords]
 
-            # SAM2's iou_predictions score is reliable — use it directly.
+            # SAM2's iou_predictions score is reliable — use it directly
             sam_score = float(scores[0]) if scores is not None else float(proposal_score)
 
             detections.append({

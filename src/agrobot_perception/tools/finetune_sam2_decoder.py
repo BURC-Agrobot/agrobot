@@ -21,10 +21,10 @@ Ground truth masks:
   Laboro Tomato ships YOLO box labels, not pixel masks. We rasterize each YOLO
   box as a filled binary rectangle — this is standard practice for box-supervised
   SAM fine-tuning. The decoder learns to produce masks that fit inside the GT
-  boxes; SAM2's architecture then naturally produces tighter masks than the
+  boxes. SAM2's architecture then naturally produces tighter masks than the
   rectangular proxy via its upsampling head.
 
-Usage (from repo root):
+Usage (from repository root):
   # Smoke-test: 10 images, 2 epochs (~2 min on CPU, confirms the loop runs)
   AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES="" PYTHONPATH=perception \\
     python3 perception/tools/finetune_sam2_decoder.py \\
@@ -108,7 +108,7 @@ def _yolo_to_518_box(
     cx_n: float, cy_n: float, w_n: float, h_n: float,
     orig_w: int, orig_h: int,
 ) -> tuple[float, float, float, float] | None:
-    """Convert YOLO normalised box to 518×518 letterboxed pixel coords."""
+    """Convert YOLO normalised box to 518×518 letterboxed pixel coordinates."""
     scale = min(_INPUT_SIZE / orig_w, _INPUT_SIZE / orig_h)
     new_w = int(orig_w * scale)
     new_h = int(orig_h * scale)
@@ -139,8 +139,7 @@ def _make_gt_mask(
     """Rasterize a box as a filled binary mask (518×518, bool).
 
     We use the box itself as the proxy GT mask because Laboro Tomato ships
-    YOLO boxes, not pixel masks. The decoder learns to fit masks inside boxes;
-    SAM2's upsampling head naturally produces tighter-than-box masks.
+    YOLO boxes, not pixel masks. The decoder learns to fit masks inside boxes. SAM2's upsampling head naturally produces tighter-than-box masks.
     """
     mask = np.zeros((_INPUT_SIZE, _INPUT_SIZE), dtype=np.float32)
     ix1, iy1 = int(x1), int(y1)
@@ -220,13 +219,13 @@ def _run_decoder_with_grad(
         sam2_model: The SAM2 model with frozen encoder, trainable decoder.
         image_embed: Cached image embeddings from set_image() — (1, C, H, W).
         high_res_feats: Optional list of high-res feature maps from the encoder.
-        box_tensor: (1, 4) float32 tensor [x1, y1, x2, y2] in 518×518 coords.
+        box_tensor: (1, 4) float32 tensor [x1, y1, x2, y2] in 518×518 coordinates.
         device: Inference device.
 
     Returns:
         logit: (518, 518) float32 tensor WITH grad_fn attached.
     """
-    # Prompt encoder is frozen — no grad needed.
+    # Prompt encoder is frozen — no grad needed
     with torch.no_grad():
         sparse_emb, dense_emb = sam2_model.sam_prompt_encoder(
             points=None,
@@ -234,7 +233,7 @@ def _run_decoder_with_grad(
             masks=None,
         )
 
-    # Mask decoder — gradients flow through here.
+    # Mask decoder — gradients flow through here
     # Return signature: (low_res_masks, iou_predictions, sam_tokens_out, obj_score_logits)
     # low_res_masks: (1, num_masks, H/4, W/4)
     decoder_out = sam2_model.sam_mask_decoder(
@@ -248,7 +247,7 @@ def _run_decoder_with_grad(
     )
     low_res_masks = decoder_out[0]  # (1, 1, H/4, W/4)
 
-    # Upsample to 518×518 — must use bilinear (not nearest) to keep grad_fn.
+    # Upsample to 518×518 — must use bilinear (not nearest) to keep grad_fn
     logit = F.interpolate(
         low_res_masks.float(),
         size=(_INPUT_SIZE, _INPUT_SIZE),
@@ -275,7 +274,7 @@ def train(
     logger.info("Loading SAM2 from %s...", sam2_ckpt)
     sam2_model = build_sam2(_SAM2_CFG, str(sam2_ckpt), device=device)
 
-    # Freeze image encoder and prompt encoder — only train mask decoder.
+    # Freeze image encoder and prompt encoder — only train mask decoder
     for name, param in sam2_model.named_parameters():
         if "image_encoder" in name or "sam_prompt_encoder" in name:
             param.requires_grad_(False)
@@ -289,8 +288,8 @@ def train(
         trainable, total, 100.0 * (1 - trainable / total),
     )
 
-    # predictor.set_image() handles image preprocessing and encoder forward pass.
-    # We use it only to cache image embeddings — then call the decoder directly.
+    # predictor.set_image() handles image preprocessing and encoder forward pass
+    # We use it only to cache image embeddings — then call the decoder directly
     predictor = SAM2ImagePredictor(sam2_model)
 
     optimizer = torch.optim.AdamW(
@@ -298,7 +297,7 @@ def train(
         lr=lr,
         weight_decay=1e-4,
     )
-    # Cosine decay to lr/10 over the full training run.
+    # Cosine decay to lr/10 over the full training run
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=epochs * len(pairs), eta_min=lr / 10
     )
@@ -323,11 +322,11 @@ def train(
             if not lines:
                 continue
 
-            # Image encoder forward pass — frozen, no grad needed.
+            # Image encoder forward pass — frozen, no grad needed
             with torch.no_grad():
                 predictor.set_image(rgb_hwc)
 
-            # Cache image embeddings for reuse across all boxes in this image.
+            # Cache image embeddings for reuse across all boxes in this image
             image_embed   = predictor._features["image_embed"]      # (1, C, H, W)
             high_res_feats = predictor._features.get("high_res_feats")  # list or None
 
@@ -349,7 +348,7 @@ def train(
                     [[x1, y1, x2, y2]], dtype=torch.float32, device=device
                 )
 
-                # Decoder forward with grad — this is where training happens.
+                # Decoder forward with grad — this is where training happens
                 logit = _run_decoder_with_grad(
                     sam2_model, image_embed, high_res_feats, box_tensor, device
                 )

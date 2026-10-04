@@ -50,9 +50,9 @@ target_link_libraries(motion_node motion_rules)
 set(motion_targets motion_rules motion_node)
 # Require the analysis tools used by test-enabled builds
 if(BUILD_TESTING)
-  # Require clang-tidy so configured C++ checks cannot be skipped
+  # Require clang-tidy to enforce the configured C++ checks
   find_program(CLANG_TIDY NAMES clang-tidy REQUIRED)
-  # Require mypy so launch typing is checked in test builds
+  # Require mypy to check launch typing in test builds
   find_program(MYPY NAMES mypy REQUIRED)
   # Check the launch file with strict Python typing
   add_test(NAME python_strict COMMAND "${MYPY}" --strict

@@ -1,8 +1,8 @@
 from setuptools import find_packages, setup
 
-# setup.py is required by ament_python (ROS 2's Python build type).
-# It tells colcon how to install this package into the ROS 2 workspace overlay.
-# Bazel does NOT use this file — Bazel uses BUILD.bazel instead.
+# ament_python, the ROS 2 Python build type, requires setup.py
+# It tells colcon how to install this package into the ROS 2 workspace overlay
+# Bazel does NOT use this file — Bazel uses BUILD.bazel instead
 
 package_name = "agrobot_perception"
 
@@ -11,11 +11,11 @@ setup(
     version="0.1.0",
     packages=find_packages(exclude=["test"]),
     data_files=[
-        # Register the package with the ROS 2 ament index.
-        # Without this, `ros2 pkg list` won't find it.
+        # Register the package with the ROS 2 ament index
+        # Without this, `ros2 pkg list` won't find it
         ("share/ament_index/resource_index/packages", [f"resource/{package_name}"]),
         (f"share/{package_name}", ["package.xml"]),
-        # Install launch files so `ros2 launch agrobot_perception` works.
+        # Install launch files so `ros2 launch agrobot_perception` works
         (f"share/{package_name}/launch", ["launch/perception.launch.py", "launch/perception_gpu.launch.py"]),
     ],
     install_requires=["setuptools"],

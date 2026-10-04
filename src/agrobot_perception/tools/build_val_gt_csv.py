@@ -11,17 +11,18 @@ Why this script exists:
 
 Coordinate transform (per image):
   YOLO: class cx cy w h  (normalised to [0,1] relative to original image dims)
-  Step 1: multiply by original image dims → pixel coords in original space
+  Step 1: multiply by original image dims → pixel coordinates in original space
   Step 2: apply letterbox scale = min(518/orig_w, 518/orig_h)
   Step 3: add padding offset (pad_x, pad_y) = ((518 - new_w)//2, (518 - new_h)//2)
   Result: x1,y1,x2,y2 in 518×518 space — directly comparable to detector output
 
 Why per-image dimension reading:
   Most Laboro Tomato images are 4032×3024 (12MP landscape), but we read each
-  image's actual dims rather than hardcoding. One different-resolution image
-  silently breaks all IoU calculations if dims are assumed.
+  image's actual dimensions instead of a fixed value.
+  Assuming dimensions silently breaks all IoU calculations for an image with
+  a different resolution.
 
-Usage (from repo root):
+Usage (from repository root):
   python3 perception/tools/build_val_gt_csv.py \
     --val-images data/Laboro-Tomato/val/images \
     --val-labels data/Laboro-Tomato/val/labels \
@@ -164,7 +165,7 @@ def build_csv(
                     if x2 - x1 < 1 or y2 - y1 < 1:
                         continue
 
-                    # image_path stored relative to repo root for portability
+                    # image_path stored relative to repository root for portability
                     repo_root = Path(__file__).resolve().parent.parent.parent
                     try:
                         rel_path = img_path.relative_to(repo_root)

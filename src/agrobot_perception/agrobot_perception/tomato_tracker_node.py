@@ -12,25 +12,27 @@ of persistent tracks across frames so that:
      With tracking, persistent_id=3 refers to the same physical tomato
      across 10 consecutive frames until it is picked or leaves the scene.
 
-  2. Centroid noise is suppressed via exponential moving average (EMA).
-     Sphere-fit jitter of ±3 cm at 0.5 m depth is averaged away over
-     3–4 frames, giving the arm planner a stable pick target.
+  2. Suppress centroid noise with an exponential moving average (EMA).
+     Average sphere-fit jitter of ±3 cm at 0.5 m depth over 3–4 frames.
+     This gives the arm planner a stable pick target.
 
-  3. Picked tomatoes are removed from the active list.
-     The arm planner publishes to /agrobot/mark_picked with the persistent_id.
-     That track is then suppressed from /agrobot/tomato_tracks so Qwen-VL and
-     the planner don't re-select an empty location on the next cycle.
+  3. Remove picked tomatoes from the active list.
+     The arm planner publishes the persistent_id to /agrobot/mark_picked.
+     Suppress that track from /agrobot/tomato_tracks.
+     Qwen-VL and the planner then avoid selecting an empty location next cycle.
 
-  4. Camera motion is compensated before matching.
-     For a rail-mounted camera doing step-and-shoot scanning, every tomato in
-     camera-frame coordinates appears to move by −Δ_camera between cycles. The
-     arm controller publishes its actual displacement on /agrobot/camera_motion
-     (geometry_msgs/Vector3 in camera optical frame) and the tracker accumulates
-     it. Before Hungarian matching, every existing track centroid is shifted by
-     −Δ_accumulated — putting it in the predicted location for the new frame.
-     This restores the diagonal-dominant cost matrix that Hungarian needs to
-     work, so persistent_ids survive the entire rail scan instead of being
-     destroyed on every move. The accumulator resets after each match cycle.
+  4. Compensate for camera motion before matching.
+     During rail scanning between captures, each tomato appears to move by
+     −Δ_camera in camera-frame coordinates between cycles.
+     The arm controller publishes actual camera displacement on
+     /agrobot/camera_motion as geometry_msgs/Vector3 in the camera optical frame.
+     The tracker accumulates that displacement.
+
+     Before Hungarian matching, shift every existing centroid by −Δ_accumulated.
+     This places each centroid at its predicted location in the new frame.
+     It restores the diagonal-dominant cost matrix that Hungarian matching needs.
+     The persistent_ids then remain through the entire rail scan.
+     Reset the accumulator after each match cycle.
 
 Algorithm (Hungarian bipartite matching in 3D):
   Build cost matrix C[i][j] = Euclidean distance between track i and detection j.
@@ -45,7 +47,7 @@ Algorithm (Hungarian bipartite matching in 3D):
   Greedy is order-dependent — it claims the locally best match first, which
   can steal a track from a better global assignment. Hungarian is optimal:
   it minimises the sum of all matched distances simultaneously, preventing
-  ID-swaps when tomatoes are close together (e.g. 5+ tomatoes on a vine).
+  ID-swaps when tomatoes are close together (for example, 5+ tomatoes on a vine).
 
 Data Flow
 ---------
@@ -105,13 +107,13 @@ from geometry_msgs.msg import Vector3
 from std_msgs.msg import String
 
 
-# ─── Track Registry ────────────────────────────────────────────────────────────
+# Track Registry
 
 class Track:
     """One persistent tomato track.
 
-    Centroid is maintained as a smoothed EMA estimate. The most recent
-    clipped_image JPEG is carried through for Qwen-VL consumption.
+    Maintain the centroid as a smoothed EMA estimate.
+    Retain the latest clipped_image JPEG for Qwen-VL.
     """
 
     def __init__(
@@ -128,7 +130,7 @@ class Track:
         self.missed_frames = 0
         self.age = 1
         self._alpha = alpha
-        self._obs = 1                                  # observations so far
+        self._obs = 1                                  # Observations so far
 
     def predict_motion(self, dx: float, dy: float, dz: float) -> None:
         """Shift the track centroid by -(dx, dy, dz) to compensate for camera motion.
@@ -138,9 +140,9 @@ class Track:
         the track centroid to where we expect to see the tomato in the new frame,
         so Hungarian matching can find the diagonal-dominant solution.
 
-        Pure translation only — the camera is assumed to keep its orientation between
-        captures (true for a linear rail). Rotational motion would need a full rigid
-        transform of the centroid vector.
+        This method supports translation only.
+        It assumes constant camera orientation between captures, as on a linear rail.
+        Rotation would require a full rigid transform of the centroid vector.
         """
         self.centroid["x"] -= dx
         self.centroid["y"] -= dy
@@ -174,7 +176,7 @@ class Track:
     def to_dict(self) -> dict:
         return {
             "persistent_id": self.persistent_id,
-            "tomato_id": self.persistent_id,       # alias so consumers see a stable id
+            "tomato_id": self.persistent_id,       # Alias so consumers see a stable id
             "centroid": {k: round(v, 4) for k, v in self.centroid.items()},
             "sphere": {k: round(v, 4) for k, v in self.sphere.items()},
             "confidence": round(self.confidence, 4),
@@ -193,7 +195,7 @@ def _euclidean(a: dict, b: dict) -> float:
     )
 
 
-# ─── Node ──────────────────────────────────────────────────────────────────────
+# Node
 
 class TomatoTrackerNode(Node):
     """ROS 2 node that assigns persistent IDs to tomato detections across frames."""
@@ -201,13 +203,13 @@ class TomatoTrackerNode(Node):
     def __init__(self) -> None:
         super().__init__("tomato_tracker")
 
-        # ── Parameters ────────────────────────────────────────────────────────
+        # Parameters
         # 8 cm threshold: wider than ±3 cm sphere-fit jitter but tighter than
-        # typical tomato-to-tomato spacing (~10–15 cm on a vine).
+        # typical tomato-to-tomato spacing (~10–15 cm on a vine)
         self.declare_parameter("match_threshold_m", 0.08)
-        # 3 missed frames ≈ 51 s on CPU. A picked tomato is gone within 1 cycle.
+        # 3 missed frames ≈ 51 s on CPU. A picked tomato is gone within 1 cycle
         self.declare_parameter("max_missed_frames", 3)
-        # alpha=0.4: new observation weighted 40%, history 60%. Converges in ~4 frames.
+        # alpha=0.4: new observation weighted 40%, history 60%. Converges in ~4 frames
         self.declare_parameter("smoothing_alpha", 0.4)
         self.declare_parameter("spatial_topic", "/agrobot/tomato_spatial")
         self.declare_parameter("tracks_topic", "/agrobot/tomato_tracks")
@@ -218,7 +220,7 @@ class TomatoTrackerNode(Node):
         spatial_topic: str = self.get_parameter("spatial_topic").value
         tracks_topic: str = self.get_parameter("tracks_topic").value
 
-        # ── State ─────────────────────────────────────────────────────────────
+        # State
         # tracks: persistent_id → Track
         self._tracks: dict[int, Track] = {}
         self._next_id: int = 0
@@ -229,31 +231,32 @@ class TomatoTrackerNode(Node):
         # Camera motion accumulator (camera optical frame, metres). Holds the
         # cumulative displacement since the last spatial frame. Protected by a
         # lock because motion and spatial messages arrive on different threads
-        # in MultiThreadedExecutor setups; under the default single-threaded
-        # executor the lock is essentially free.
+        # in MultiThreadedExecutor setups. under the default single-threaded
+        # executor the lock is essentially free
         self._motion_lock = threading.Lock()
         self._pending_motion: list[float] = [0.0, 0.0, 0.0]
 
-        # ── Subscriptions ─────────────────────────────────────────────────────
+        # Subscriptions
         self.create_subscription(
             String, spatial_topic, self._spatial_callback, 10
         )
-        # Arm planner publishes {"persistent_id": N} here after a successful pick.
+        # Arm planner publishes {"persistent_id": N} here after a successful pick
         self.create_subscription(
             String, "/agrobot/mark_picked", self._mark_picked_callback, 10
         )
-        # Dashboard reset button publishes here to wipe all tracks and restart IDs from 0.
+        # Dashboard reset button publishes here to wipe all tracks and restart IDs from 0
         self.create_subscription(
             String, "/agrobot/reset_tracker", self._reset_callback, 10
         )
-        # Arm controller publishes Vector3 camera displacement (camera optical frame,
-        # metres) after each rail move. Multiple publishes between spatial frames are
-        # summed. On the next spatial callback the accumulator is consumed and reset.
+        # The arm controller publishes Vector3 camera displacement after each rail move
+        # Displacement uses metres in the camera optical frame
+        # Sum messages between spatial frames
+        # Read and reset the accumulator during the next spatial callback
         self.create_subscription(
             Vector3, "/agrobot/camera_motion", self._camera_motion_callback, 10
         )
 
-        # ── Publishers ────────────────────────────────────────────────────────
+        # Publishers
         self._tracks_pub = self.create_publisher(String, tracks_topic, 10)
 
         self.get_logger().info(
@@ -263,7 +266,7 @@ class TomatoTrackerNode(Node):
             f"alpha={self._alpha}"
         )
 
-    # ── Callbacks ─────────────────────────────────────────────────────────────
+    # Callbacks
 
     def _reset_callback(self, msg: String) -> None:
         """Wipe all tracks and restart the persistent ID counter from 0."""
@@ -291,7 +294,7 @@ class TomatoTrackerNode(Node):
             self.get_logger().error(f"mark_picked parse error: {exc}")
             return
         self._picked_ids.add(pid)
-        # Also immediately remove from active registry so it stops publishing.
+        # Also immediately remove from active registry so it stops publishing
         self._tracks.pop(pid, None)
         self.get_logger().info(f"Tomato persistent_id={pid} marked as picked — suppressed.")
 
@@ -305,10 +308,10 @@ class TomatoTrackerNode(Node):
 
         self._frame += 1
 
-        # ── Step 0: prediction — compensate accumulated camera motion ──────
+        # Step 0: prediction — compensate accumulated camera motion
         # Drain the motion accumulator atomically and shift every track by −Δ
-        # so its centroid sits where we expect to observe it in this frame.
-        # 1 mm threshold suppresses noise-level zero-motion publishes.
+        # so its centroid sits where we expect to observe it in this frame
+        # 1 mm threshold suppresses noise-level zero-motion publishes
         with self._motion_lock:
             dx, dy, dz = self._pending_motion
             self._pending_motion = [0.0, 0.0, 0.0]
@@ -322,8 +325,8 @@ class TomatoTrackerNode(Node):
                 f"to {len(self._tracks)} track(s) before matching."
             )
 
-        # ── Step 1: Hungarian bipartite matching ───────────────────────────
-        # Only consider non-picked active tracks as candidates.
+        # Step 1: Hungarian bipartite matching
+        # Only consider non-picked active tracks as candidates
         active_tracks = [
             (pid, t) for pid, t in self._tracks.items()
             if pid not in self._picked_ids
@@ -335,10 +338,10 @@ class TomatoTrackerNode(Node):
         matched_det_indices: set[int] = set()
 
         if n_tracks > 0 and n_dets > 0:
-            # Build cost matrix C[i][j] = 3D distance(track_i, detection_j).
-            # Pairs beyond match_threshold_m are set to INF — the Hungarian
-            # solver will only assign them if no feasible alternative exists,
-            # and we reject any such pair in the post-filter below.
+            # Build cost matrix C[i][j] = 3D distance(track_i, detection_j)
+            # Set pairs beyond match_threshold_m to INF
+            # The Hungarian solver assigns these pairs only without a feasible alternative
+            # Reject any such pair in the final filter below
             _INF = 1e9
             C = np.full((n_tracks, n_dets), fill_value=_INF)
             for i, (pid, track) in enumerate(active_tracks):
@@ -347,19 +350,19 @@ class TomatoTrackerNode(Node):
                     if d < self._threshold:
                         C[i, j] = d
 
-            # scipy.optimize.linear_sum_assignment: O(n³), globally optimal.
+            # scipy.optimize.linear_sum_assignment: O(n³), globally optimal
             row_ind, col_ind = linear_sum_assignment(C)
 
             for i, j in zip(row_ind, col_ind):
                 if C[i, j] >= self._threshold:
-                    # INF pair — both track and detection remain unmatched.
+                    # INF pair — both track and detection remain unmatched
                     continue
                 pid, track = active_tracks[i]
                 track.update(tomatoes[j])
                 matched_track_ids.add(pid)
                 matched_det_indices.add(j)
 
-        # Unmatched detections → new tracks.
+        # Unmatched detections → new tracks
         for j, tomato in enumerate(tomatoes):
             if j not in matched_det_indices:
                 new_pid = self._next_id
@@ -367,7 +370,7 @@ class TomatoTrackerNode(Node):
                 self._tracks[new_pid] = Track(new_pid, tomato, self._alpha)
                 matched_track_ids.add(new_pid)
 
-        # ── Step 2: age unmatched tracks, drop stale ones ──────────────────
+        # Step 2: age unmatched tracks, drop stale ones
         to_drop = []
         for pid, track in self._tracks.items():
             if pid not in matched_track_ids:
@@ -383,7 +386,7 @@ class TomatoTrackerNode(Node):
             self._tracks.pop(pid)
             self._picked_ids.discard(pid)
 
-        # ── Step 3: publish active, non-picked tracks ──────────────────────
+        # Step 3: publish active, non-picked tracks
         active = [
             t.to_dict()
             for t in self._tracks.values()

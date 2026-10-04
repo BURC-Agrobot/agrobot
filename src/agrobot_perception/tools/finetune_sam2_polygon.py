@@ -15,10 +15,10 @@ Why this replaces finetune_sam2_decoder.py (rect-proxy version):
 
 Training changes vs rect version:
   - GT mask: rasterized COCO polygon (round) not filled bbox (rectangle)
-  - Epochs: 5 not 10 (rect version overfit; polygons are harder, less overfit risk)
+  - Epochs: 5 not 10 (rect version overfit. Polygons are harder, less overfit risk)
   - Everything else identical: freeze encoder, train decoder, BCE+Dice, AdamW
 
-Usage (from repo root):
+Usage (from repository root):
   # Smoke-test: 10 images, 2 epochs (~3 min on NucBox CPU)
   AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES="" PYTHONPATH=perception \\
     python3 perception/tools/finetune_sam2_polygon.py \\
@@ -123,7 +123,7 @@ def load_coco_annotations(
                 continue
             instances.append({
                 "bbox_xywh": ann["bbox"],
-                "polygon": seg[0],  # flat [x0,y0,x1,y1,...] in original pixel coords
+                "polygon": seg[0],  # Flat [x0,y0,x1,y1,...] in original pixel coordinates
             })
 
         if instances:
@@ -163,7 +163,7 @@ def _polygon_to_518_mask(
 ) -> np.ndarray | None:
     """Rasterize a COCO polygon into 518×518 letterboxed binary mask.
 
-    polygon_flat: flat [x0,y0,x1,y1,...] in original image pixel coords.
+    polygon_flat: flat [x0,y0,x1,y1,...] in original image pixel coordinates.
     Returns float32 (518, 518) mask, or None if degenerate.
     """
     pts = np.array(polygon_flat, dtype=np.float64).reshape(-1, 2)
@@ -196,11 +196,14 @@ def _sample_interior_points(
     always interior. For non-convex shapes, jittered copies may land outside —
     we filter those with a point-in-polygon test.
 
-    This is needed because SAM2 AMG uses point prompts at runtime but the
-    previous fine-tuning used box prompts. The mask decoder is a cross-attention
-    transformer: box prompts emit 2 corner tokens, point prompts emit 1 point +
-    1 label token. Training on the wrong prompt type is a systematic distribution
-    shift that caps mask quality regardless of GT polygon quality.
+    SAM2 AMG uses point prompts at runtime.
+    The previous fine-tuning used box prompts.
+    The mask decoder is a transformer with cross-attention.
+    Box prompts emit 2 corner tokens.
+    Point prompts emit 1 point token and 1 label token.
+
+    Training with the wrong prompt type shifts the distribution systematically.
+    This limits mask quality regardless of GT polygon quality.
     """
     pts_orig = np.array(polygon_flat, dtype=np.float64).reshape(-1, 2)
     if len(pts_orig) < 3:
@@ -307,7 +310,7 @@ def train(
     from sam2.sam2_image_predictor import SAM2ImagePredictor
 
     # Suppress SAM2's per-frame INFO logs — must happen after import
-    # so the loggers actually exist when we set their levels.
+    # so the loggers actually exist when we set their levels
     for _name in logging.root.manager.loggerDict:
         if _name.startswith("sam2"):
             logging.getLogger(_name).setLevel(logging.WARNING)
@@ -382,10 +385,10 @@ def train(
                         continue
                     gt_mask = torch.from_numpy(gt_mask_np).to(device)
 
-                    # Sample interior points matching the AMG runtime prompt type.
+                    # Sample interior points matching the AMG runtime prompt type
                     # Average loss over n_points random foreground points so the
                     # decoder sees a distribution of point positions rather than
-                    # always the centroid (which would overfit to a single prompt).
+                    # always the centroid (which would overfit to a single prompt)
                     interior_pts = _sample_interior_points(
                         inst["polygon"], orig_w, orig_h, scale, pad_x, pad_y,
                         n_points=3,
@@ -395,7 +398,7 @@ def train(
 
                     inst_loss = torch.tensor(0.0, device=device)
                     for px, py in interior_pts:
-                        # SAM2 prompt encoder expects (B, N, 2) coords and (B, N) labels
+                        # SAM2 expects (B, N, 2) prompt coordinates and (B, N) labels
                         pt_coords = torch.tensor([[[px, py]]], dtype=torch.float32, device=device)
                         pt_labels = torch.tensor([[1]], dtype=torch.int32, device=device)
                         logit = _run_decoder(

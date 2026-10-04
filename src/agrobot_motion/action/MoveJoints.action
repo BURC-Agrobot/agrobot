@@ -19,7 +19,7 @@ uint8 STOP_FAILED=5
 uint8 code
 # Explain the outcome so the caller can diagnose failures
 string message
-# Confirm fresh stillness and a terminal controller if motion was sent
+# Confirm fresh stillness and a terminal controller after any motion dispatch
 bool stop_confirmed
 ---
 # Report the current phase while the request remains active

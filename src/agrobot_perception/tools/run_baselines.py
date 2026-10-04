@@ -81,7 +81,7 @@ def _orig_box_to_518(
             x2 * scale + pad_x, y2 * scale + pad_y)
 
 
-# ── YOLOv8 ────────────────────────────────────────────────────────────────────
+# YOLOv8
 
 def _detect_yolov8(weights: Path, val_paths: list[Path], conf: float) -> list[tuple[Path, list[dict]]]:
     from ultralytics import YOLO
@@ -112,7 +112,7 @@ def _detect_yolov8(weights: Path, val_paths: list[Path], conf: float) -> list[tu
     return out
 
 
-# ── Grounding-DINO ────────────────────────────────────────────────────────────
+# Grounding-DINO
 
 def _detect_grounding_dino(prompt: str, val_paths: list[Path], conf: float
                            ) -> list[tuple[Path, list[dict]]]:
@@ -159,7 +159,7 @@ def _detect_grounding_dino(prompt: str, val_paths: list[Path], conf: float
     return out
 
 
-# ── OWL-ViT v2 ────────────────────────────────────────────────────────────────
+# OWL-ViT v2
 
 def _detect_owl_vit_v2(prompt: str, val_paths: list[Path], conf: float
                        ) -> list[tuple[Path, list[dict]]]:

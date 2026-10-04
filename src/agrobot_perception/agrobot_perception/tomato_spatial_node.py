@@ -3,20 +3,21 @@ tomato_spatial_node.py — Tomato 3D Spatial Localization ROS 2 Node
 
 Architecture
 ------------
-NODE 2 in the Agrobot TOM v2 picking pipeline. Consumes 2D detections from
-tomato_detector_node and the aligned PointCloud2 from the RealSense driver.
-For each detection bbox it clips the point cloud, fits a sphere via RANSAC
-algebraic least squares, and publishes rich 3D localization data for the arm
-planner (Dani) and Qwen-VL reasoner (Sprint 4).
+This is NODE 2 in the Agrobot TOM v2 picking pipeline.
+It receives 2D detections from tomato_detector_node and the aligned PointCloud2
+from the RealSense driver. For each detection bounding box, it clips the point
+cloud. It fits a sphere with RANSAC and algebraic least squares.
+It publishes 3D localization data for Dani's arm planner and the Qwen-VL
+reasoner (Sprint 4).
 
 Why a separate node from tomato_detector_node?
   - The detector runs at ~0.05 Hz on CPU (SAM2 AMG is slow). Point cloud
     processing is fast (<50 ms). Coupling them would stall the spatial pipeline
-    for 17s per frame.
+    for 17 s per frame.
   - Dani's arm planner needs a versioned, stable JSON interface independent of
     which perception model is currently active.
   - Qwen-VL (Sprint 4) subscribes to /agrobot/tomato_spatial directly and reads
-    clipped_image; it doesn't need to know anything about SAM2 or DINOv2.
+    clipped_image. It doesn't need to know anything about SAM2 or DINOv2.
 
 Data Flow
 ---------
@@ -125,9 +126,9 @@ from agrobot_perception.utils.pointcloud_utils import (
 )
 
 
-# ─── QoS Profiles ─────────────────────────────────────────────────────────────
+# QoS Profiles
 # Camera sensor topics publish with Best Effort + Volatile. Using Reliable QoS
-# would cause a QoS mismatch warning and the subscription would receive nothing.
+# would cause a QoS mismatch warning and the subscription would receive nothing
 SENSOR_QOS = QoSProfile(
     reliability=QoSReliabilityPolicy.BEST_EFFORT,
     history=QoSHistoryPolicy.KEEP_LAST,
@@ -142,7 +143,7 @@ class TomatoSpatialNode(Node):
     def __init__(self) -> None:
         super().__init__("tomato_spatial")
 
-        # ── Parameters ────────────────────────────────────────────────────────
+        # Parameters
         self.declare_parameter(
             "pointcloud_topic", "/camera/camera/depth/color/points"
         )
@@ -154,14 +155,14 @@ class TomatoSpatialNode(Node):
         )
         self.declare_parameter("detections_topic", "/agrobot/detections")
         # Minimum cluster size: too few points mean the bbox clipped a very small
-        # patch (e.g. a partially occluded tomato) — sphere fit would be unreliable.
+        # patch (for example, a partially occluded tomato) — sphere fit would be unreliable
         self.declare_parameter("min_cluster_points", 15)
         self.declare_parameter("ransac_iterations", 60)
-        # 1.5 cm inlier threshold matches typical RealSense D456 depth noise at 1 m.
+        # 1.5 cm inlier threshold matches typical RealSense D456 depth noise at 1 m
         self.declare_parameter("ransac_inlier_dist_m", 0.015)
         self.declare_parameter("publish_debug_image", True)
-        # The detector takes ~17s per frame on CPU; the point cloud should still
-        # be recent relative to wall clock (camera publishes at 15–30 Hz).
+        # The detector takes ~17 s per frame on CPU. The point cloud should still
+        # be recent relative to wall clock (camera publishes at 15–30 Hz)
         self.declare_parameter("max_cloud_age_s", 2.0)
 
         pc_topic: str = self.get_parameter("pointcloud_topic").value
@@ -174,29 +175,29 @@ class TomatoSpatialNode(Node):
         self._pub_debug: bool = self.get_parameter("publish_debug_image").value
         self._max_cloud_age: float = self.get_parameter("max_cloud_age_s").value
 
-        # ── State ─────────────────────────────────────────────────────────────
+        # State
         self._bridge = CvBridge()
         self._latest_cloud: PointCloud2 | None = None
         self._cloud_recv_time: float = 0.0
         self._latest_bgr: np.ndarray | None = None
         self._color_orig_wh: tuple[int, int] | None = None
-        # Camera intrinsics: populated on first CameraInfo message and then stable.
+        # Camera intrinsics: populated on first CameraInfo message and then stable
         self._cam_info: dict | None = None
 
-        # ── Subscriptions ─────────────────────────────────────────────────────
+        # Subscriptions
         self.create_subscription(
             PointCloud2, pc_topic, self._cloud_callback, SENSOR_QOS
         )
         self.create_subscription(
             Image, color_topic, self._color_callback, SENSOR_QOS
         )
-        # Reliable QoS for CameraInfo — it publishes infrequently and we need it.
+        # Reliable QoS for CameraInfo — it publishes infrequently and we need it
         self.create_subscription(CameraInfo, info_topic, self._info_callback, 10)
         self.create_subscription(
             Detection2DArray, det_topic, self._detections_callback, 10
         )
 
-        # ── Publishers ────────────────────────────────────────────────────────
+        # Publishers
         self._spatial_pub = self.create_publisher(
             String, "/agrobot/tomato_spatial", 10
         )
@@ -210,7 +211,7 @@ class TomatoSpatialNode(Node):
             f"detections='{det_topic}' pointcloud='{pc_topic}'"
         )
 
-    # ── Subscriber callbacks ──────────────────────────────────────────────────
+    # Subscriber callbacks
 
     def _cloud_callback(self, msg: PointCloud2) -> None:
         self._latest_cloud = msg
@@ -225,7 +226,7 @@ class TomatoSpatialNode(Node):
             self.get_logger().error(f"cv_bridge color conversion failed: {exc}")
 
     def _info_callback(self, msg: CameraInfo) -> None:
-        # Intrinsics are constant for a given camera session; only store once.
+        # Intrinsics are constant for a given camera session. Only store once
         if self._cam_info is not None:
             return
         K = msg.k
@@ -273,11 +274,13 @@ class TomatoSpatialNode(Node):
                 throttle_duration_sec=10.0,
             )
 
-        # Parse the full cloud once and share the numpy array across all detections.
-        # read_points() returns a structured numpy array with named fields ('x','y','z')
-        # rather than a plain (N,3) array — itemsize=20 because the PointCloud2 wire
-        # format includes padding bytes even when only xyz fields are requested.
-        # We extract each field by name before stacking into a plain float32 array.
+        # Parse the full cloud once
+        # Share the numpy array across all detections
+        # read_points() returns a structured array with named fields ('x','y','z')
+        # It does not return a plain (N,3) array
+        # PointCloud2 includes padding bytes even for requests with only xyz fields
+        # This padding gives itemsize=20
+        # Extract fields by name before stacking them into a plain float32 array
         try:
             raw_struct = np.array(
                 list(
@@ -301,7 +304,7 @@ class TomatoSpatialNode(Node):
         all_points = np.column_stack(
             [raw_struct["x"], raw_struct["y"], raw_struct["z"]]
         ).astype(np.float32)  # (N, 3)
-        # Hard depth bounds: drop points behind the camera or beyond arm reach.
+        # Hard depth bounds: drop points behind the camera or beyond arm reach
         all_points = all_points[
             (all_points[:, 2] > 0.05) & (all_points[:, 2] < 5.0)
         ]
@@ -311,8 +314,8 @@ class TomatoSpatialNode(Node):
         results: list[dict] = []
 
         for i, det in enumerate(msg.detections):
-            # Reconstruct the (x1, y1, x2, y2) bbox from Detection2D center + size.
-            # All coordinates are in 518×518 letterboxed space (preprocess_for_dino).
+            # Reconstruct the (x1, y1, x2, y2) bbox from Detection2D center + size
+            # All coordinates are in 518×518 letterboxed space (preprocess_for_dino)
             cxd = det.bbox.center.position.x
             cyd = det.bbox.center.position.y
             sw = det.bbox.size_x
@@ -339,7 +342,7 @@ class TomatoSpatialNode(Node):
 
             # Strip background clutter before fitting — at close range (<0.6 m)
             # the bbox clip includes wall/surface points at higher Z that inflate
-            # the sphere radius. Keep only the near-depth portion of the cluster.
+            # the sphere radius. Keep only the near-depth portion of the cluster
             cluster = filter_cluster_by_depth(cluster)
 
             center, radius, inliers = fit_sphere_ransac(
@@ -348,9 +351,9 @@ class TomatoSpatialNode(Node):
                 inlier_dist=self._ransac_dist,
             )
 
-            # Tomatoes are 2–12 cm radius (up to 24cm diameter covers beefsteak).
+            # Tomatoes are 2–12 cm radius (up to 24cm diameter covers beefsteak)
             # A fit outside this range means residual background clutter or a
-            # false-positive detection with no spherical structure.
+            # false-positive detection with no spherical structure
             if not (0.015 <= radius <= 0.12):
                 self.get_logger().debug(
                     f"Tomato {i}: radius={radius:.3f}m outside [0.015, 0.075] — "
@@ -405,7 +408,7 @@ class TomatoSpatialNode(Node):
         if self._pub_debug and self._latest_bgr is not None and results:
             self._publish_debug(results, msg.header, orig_w, orig_h)
 
-    # ── Debug publisher ────────────────────────────────────────────────────────
+    # Debug publisher
 
     def _publish_debug(
         self,
@@ -432,7 +435,7 @@ class TomatoSpatialNode(Node):
 
             u = int(cx3 / cz3 * fx + cx_cam)
             v = int(cy3 / cz3 * fy + cy_cam)
-            # Project sphere radius (metres) to pixels at the centroid depth.
+            # Project sphere radius (metres) to pixels at the centroid depth
             radius_px = max(2, int(r["sphere"]["radius"] / cz3 * fx))
 
             if 0 <= u < orig_w and 0 <= v < orig_h:

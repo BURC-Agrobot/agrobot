@@ -12,7 +12,7 @@ Why this exists for the paper's stretch claim:
 
 Algorithm:
   For each unlabeled train image:
-    1. Run SAM2 AMG to get mask proposals (no fine-tune; vanilla checkpoint).
+    1. Run SAM2 AMG to get mask proposals (no fine-tune. vanilla checkpoint).
     2. For each mask: crop bbox -> SigLIP image encode -> cosine to text prompt
        ("a photograph of a ripe tomato"). Top-K across all train images become
        the "pseudo-positive" mask set.
@@ -202,8 +202,8 @@ def main() -> None:
         image_files = image_files[: args.max_images]
     logger.info("Found %d training images.", len(image_files))
 
-    # Pass 1: collect (image_idx, mask, siglip_score) for ALL masks across the dataset.
-    # We hold patch_norms in memory only when we re-process the top/bottom-K images.
+    # Pass 1: collect (image_idx, mask, siglip_score) for ALL masks across the dataset
+    # We hold patch_norms in memory only when we re-process the top/bottom-K images
     candidates: list[tuple[int, np.ndarray, float]] = []
     for i, img_path in enumerate(image_files):
         bgr = cv2.imread(str(img_path))
@@ -215,7 +215,7 @@ def main() -> None:
         if not masks_data:
             continue
 
-        # SigLIP-score every mask in this image in one batch.
+        # SigLIP-score every mask in this image in one batch
         crops = []
         valid = []
         for j, m in enumerate(masks_data):
@@ -252,7 +252,7 @@ def main() -> None:
                 len(candidates), len(pos), pos[-1][2], pos[0][2])
 
     # Pass 2: for the top-K positives (and bottom-K negatives), recompute DINOv2
-    # patches and accumulate coverage-weighted mean per mask.
+    # patches and accumulate coverage-weighted mean per mask
     pos_vectors: list[torch.Tensor] = []
     neg_vectors: list[torch.Tensor] = []
 

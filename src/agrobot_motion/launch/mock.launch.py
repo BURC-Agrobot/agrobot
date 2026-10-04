@@ -22,7 +22,7 @@ def generate_launch_description() -> LaunchDescription:
         raise TypeError("Expected expanded robot description text")
     # Inspect control plugins before any hardware process can start
     hardware = ElementTree.fromstring(description).findall("ros2_control/hardware/plugin")
-    # Refuse launch unless exactly one supported mock plugin is configured
+    # Refuse launch without exactly one supported mock plugin
     if len(hardware) != 1 or hardware[0].text != "mock_components/GenericSystem":
         raise ValueError("This launch requires mock_components/GenericSystem")
     # Reuse the existing controller setup instead of copying joint mappings

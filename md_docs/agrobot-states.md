@@ -2,44 +2,45 @@
 
 - source_pdf: `pdf_docs/agrobot-states.pdf`
 - workspace: current
-- view: conceptual; current mock configuration
-- method: static source inspection
-- whole_robot_state_machine: none implemented
-- system_state_owner: none in current source
-- motion_level_states: live in `/agrobot_motion` (Level 3)
-- transitions: none in source
-- initial_or_final_markers: none in source
+- view: Conceptual view of the current mock configuration.
+- method: Static source inspection.
+- whole_robot_state_machine: The source implements no whole-robot state machine.
+- system_state_owner: The current source defines no system state owner.
+- motion_level_states: `/agrobot_motion` contains the motion states (Level 3).
+- transitions: The source defines no whole-robot transitions.
+- initial_or_final_markers: The source defines no whole-robot initial or final markers.
 
 ## Semantics
 
-- `kind: context`: background fact, not a state.
-- `kind: inferred_mode`: configuration mode inferred from source, not a stored
-  state.
-- `kind: missing`: required capability with no implementation.
-- Edges are context links only; none are transitions.
+- `kind: context`: The node describes a background fact, not a state.
+- `kind: inferred_mode`: Source inspection suggests this configuration mode.
+  The source does not store it as a state.
+- `kind: missing`: The source does not implement this required capability.
+- Edges connect context nodes. They do not represent transitions.
 
 ## Nodes
 
 - `robot_model` | kind: context | Robot model
-  - Arm: six revolute joints.
-  - Rail: one prismatic joint.
-  - "ready" and "start" are named poses, not operating states.
+  - The arm has six revolute joints.
+  - The rail has one prismatic joint.
+  - "ready" and "start" name poses, not operating states.
 - `mock_motion_configuration` | kind: inferred_mode | Mock motion configuration
-  - Inferred mode, not a stored state.
-  - Hardware: `mock_components/GenericSystem` only.
-  - Controller activation is not runtime-verified.
+  - Source inspection suggests this mode. The source does not store it as a state.
+  - The hardware uses only `mock_components/GenericSystem`.
+  - Controller activation has no runtime verification.
 - `motion_owner` | kind: context | Motion owner
   - `/agrobot_motion` handles one arm OR rail request.
-  - Uses arm + rail controllers and joint feedback.
-  - Motion FAULTED rejects new goals until restart (local, not robot-wide).
+  - It uses the arm and rail controllers and joint feedback.
+  - Motion state FAULTED rejects new goals until restart.
+  - This fault applies locally, not to the whole robot.
 - `system_coordination` | kind: missing | System coordination is absent
-  - No supervisor, pick coordinator, gripper control, or real-drive interface.
-  - No robot-wide readiness, stop, fault, or recovery transitions.
-  - Stopping exists only inside `/agrobot_motion` for its own request.
-  - Previous-codebase supervisor diagrams describe a separate system.
+  - The source has no supervisor, pick coordinator, gripper control, or interface to real drives.
+  - The source has no whole-robot readiness, stop, fault, or recovery transitions.
+  - `/agrobot_motion` provides stopping only for its own request.
+  - Supervisor diagrams from the previous codebase describe a separate system.
 
 ## Edges
 
 - `robot_model -- mock_motion_configuration` | context
 - `mock_motion_configuration -- motion_owner` | context
-- `mock_motion_configuration -- system_coordination` | context; scope boundary
+- `mock_motion_configuration -- system_coordination` | context | scope boundary

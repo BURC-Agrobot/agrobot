@@ -21,13 +21,13 @@ Why opset 17:
   and reducing MIGraphX's ability to fuse operations.
 
 Why tracing not scripting:
-  DINOv2's forward_features has Python-level control flow. torch.onnx.export
-  uses tracing — it runs one forward pass with dummy input and records tensor
-  ops. For a fixed-size feedforward ViT, this is correct and produces a clean
-  graph. Dynamic control flow would require TorchScript, which DINOv2 doesn't
-  support out of the box.
+  DINOv2 forward_features uses Python control flow.
+  torch.onnx.export traces one forward pass with dummy input and records
+  tensor operations. This correctly represents a feedforward ViT with fixed
+  input size. Dynamic control flow would require TorchScript.
+  DINOv2 does not support TorchScript without changes.
 
-Usage (from repo root):
+Usage (from repository root):
   # [MAC] — runs on MPS (fast) or CPU
   PYTHONPATH=perception python3 perception/tools/export_dino_onnx.py \
     --output models/dino_vitb14_patches.onnx
@@ -69,7 +69,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
 _DINO_MODEL_NAME = "dinov2_vitb14"
-_INPUT_SIZE = 518     # must be a multiple of patch_size=14: 518 = 37 * 14
+_INPUT_SIZE = 518     # Must be a multiple of patch_size=14: 518 = 37 * 14
 _EMBED_DIM  = 768     # ViT-B embedding dimension
 _N_PATCHES  = 37 * 37  # 1369 patch tokens per frame
 _OPSET      = 17
@@ -106,8 +106,8 @@ class DINOv2PatchExtractor(torch.nn.Module):
         """
         features = self.dino.forward_features(x)
         patch_tokens = features["x_norm_patchtokens"]  # (B, 1369, 768)
-        # L2-normalise per patch so cosine similarity = dot product at inference.
-        # Baking this into the ONNX graph saves a normalize call per frame.
+        # L2-normalise per patch so cosine similarity = dot product at inference
+        # Baking this into the ONNX graph saves a normalize call per frame
         return F.normalize(patch_tokens, dim=-1)
 
 
@@ -127,8 +127,8 @@ def export(output_path: Path, device: torch.device, fixed_batch: bool = False) -
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # MIGraphX has limited dynamic-shape support; fixed batch can avoid crashes.
-    # dynamo=False: legacy TorchScript exporter, stable with MIGraphX.
+    # MIGraphX has limited dynamic-shape support. fixed batch can avoid crashes
+    # dynamo=False: legacy TorchScript exporter, stable with MIGraphX
     export_kwargs: dict = {
         "opset_version": _OPSET,
         "input_names": ["image"],

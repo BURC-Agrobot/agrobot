@@ -1,8 +1,8 @@
 """
-visualize.py — Professional eval visualizations: annotated images + HTML report.
+visualize.py — Evaluation images with annotations and an HTML report.
 
 Generates per-image overlays (GT, TP, FP boxes) and an HTML index with metrics.
-Used by run_eval.py when --visualize-dir is set.
+run_eval.py uses this module when --visualize-dir specifies an output directory.
 """
 
 from __future__ import annotations

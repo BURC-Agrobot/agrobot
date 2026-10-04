@@ -10,10 +10,10 @@ Why TTA (Phase 1.2):
   its own --amg-crops switch) raises effective resolution for small objects
   whose diameter falls below the AMG grid spacing (518/28 = 18.5 px at S4.12).
 
-  TTA almost always helps mAP because mAP is the area under the PR curve and
-  TTA adds independent score samples — the union of two reasonable detector
-  passes has strictly more recall than either alone, and final NMS limits the
-  precision cost.
+  TTA almost always improves mAP, which is the area under the precision-recall
+  (PR) curve. TTA adds independent score samples.
+  Combining two reasonable detector passes gives strictly higher recall than
+  either pass alone. Final NMS limits the reduction in precision.
 
 Why this codebase's TTA does NOT include true 518/700 multi-scale:
   The detector's coverage-weighted scoring is hard-wired to the 37x37 DINOv2
@@ -26,9 +26,13 @@ Why this codebase's TTA does NOT include true 518/700 multi-scale:
   generates full-image + 4 quadrant proposals.
 
 Architecture:
-  TTAWrapper(detector).detect(chw) runs detector twice (original + hflip),
-  un-flips the flipped detections, concatenates, applies a final NMS, and
-  caps at max_detections. The inner detector is otherwise unmodified.
+  TTAWrapper(detector).detect(chw) follows these steps:
+    1. Run the detector on the original image and its horizontal reflection.
+    2. Reverse the reflection of detections from the reflected image.
+    3. Combine the detections.
+    4. Apply final NMS.
+    5. Limit the result to max_detections.
+  The wrapper otherwise leaves the inner detector unchanged.
 
 Sprint 4: Phase 1.2 — gate experiment for the rest of the paper plan.
 """
@@ -96,8 +100,7 @@ class TTAWrapper:
         nms_iou_threshold: IoU threshold applied to the merged detection set.
             Use 0.5 to mirror sam2_amg_detector's default and the eval CLI.
         max_detections: cap on the merged set after NMS+sort.
-        do_hflip: enable horizontal-flip pass. True is the standard setting;
-            set False if you only want crop-augmentation via the inner detector.
+        do_hflip: enable horizontal-flip pass. True is the standard setting. Set False if you only want crop-augmentation via the inner detector.
     """
 
     def __init__(
@@ -113,15 +116,15 @@ class TTAWrapper:
         self._do_hflip = do_hflip
 
     def detect(self, preprocessed_chw: np.ndarray) -> list[dict]:
-        # Pass 1: original input. The inner detector applies its own filter+NMS+cap.
+        # Pass 1: original input. The inner detector applies its own filter+NMS+cap
         d1 = self._base.detect(preprocessed_chw)
 
         merged: list[dict] = list(d1)
 
         if self._do_hflip:
-            # Slice the width axis; .copy() because the inner detector reads
+            # Slice the width axis. .copy() because the inner detector reads
             # the array as a contiguous numpy buffer and downstream pytorch
-            # forwards reject non-contiguous strides on some devices.
+            # forwards reject non-contiguous strides on some devices
             flipped = np.ascontiguousarray(preprocessed_chw[:, :, ::-1])
             d2 = self._base.detect(flipped)
             d2 = _flip_detections(d2, image_width=preprocessed_chw.shape[2])
@@ -130,8 +133,8 @@ class TTAWrapper:
         if not merged:
             return []
 
-        # Final cross-pass NMS removes the systematic duplicate where the same
-        # tomato is detected by both passes at slightly different boxes.
+        # Apply final NMS to remove duplicates between passes
+        # Both passes can detect the same tomato with slightly different boxes
         merged = _box_nms(merged, self._nms_iou)
         merged.sort(key=lambda d: d["score"], reverse=True)
         return merged[: self._max_detections]

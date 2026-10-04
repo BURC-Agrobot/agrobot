@@ -2,13 +2,15 @@
 siglip_rescoring.py — Per-detection SigLIP-conditioned re-scoring (Phase 1.3).
 
 Why SigLIP on top of DINOv2:
-  DINOv2 patch features are dense and self-supervised — strong on local texture
-  and shape, weaker on global object identity. SigLIP is contrastively pretrained
-  on web-scale image-text pairs — strong on object identity from a single global
-  embedding, weaker on dense localisation. Their failure modes are largely
-  decorrelated, so a simple late fusion of the two scores reliably outperforms
-  either alone (this is the well-established "ensemble of complementary
-  encoders" trick from open-vocabulary detection).
+  DINOv2 uses dense, self-supervised patch features.
+  These features represent local texture and shape better than global object identity.
+  SigLIP uses contrastive pretraining on image-text pairs from the web.
+  Its single global embedding represents object identity better than dense locations.
+
+  The two models largely fail in different ways.
+  Combining their scores therefore reliably outperforms either model alone.
+  Open-vocabulary detection uses this established method of combining
+  complementary encoders.
 
 Why a re-scoring wrapper, not a detector rewrite:
   The underlying detector already returns its raw scoring components
@@ -20,7 +22,7 @@ Score formula (Phase 1.3 fixed weights — Phase 2.2 will train an MLP on these)
   siglip_sim = max_p cos(siglip_img, prompt_pos_p) - max_n cos(siglip_img, prompt_neg_n)
   score = w_dino * dino_sim + w_siglip * siglip_sim + w_pred_iou * pred_iou
 
-  Default weights (0.4, 0.4, 0.2) follow the plan; tune via CLI in Phase 2.2.
+  Default weights (0.4, 0.4, 0.2) follow the plan. Tune via CLI in Phase 2.2.
 
 Cost:
   ~30 surviving detections per image × one SigLIP image-encoder forward at
@@ -43,7 +45,7 @@ logger = logging.getLogger(__name__)
 _IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 _IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
-# Defaults match the plan's prompt set. Override per-call via the constructor.
+# Defaults match the plan's prompt set. Override per-call via the constructor
 _DEFAULT_POSITIVE_PROMPTS = (
     "a photograph of a ripe red tomato on a vine",
     "a photograph of a ripe yellow tomato",
@@ -74,10 +76,14 @@ def _select_device() -> torch.device:
 
 
 def _as_tensor(x):
-    """Recent transformers versions wrap get_*_features outputs in a
-    BaseModelOutputWithPooling instead of returning a raw Tensor. Unwrap by
-    preferring `pooler_output`, then `last_hidden_state[:, 0]`, then a
-    last-resort attribute scan. Tensors pass through unchanged.
+    """Extract features from recent transformers output wrappers.
+
+    Recent versions return BaseModelOutputWithPooling from get_*_features
+    instead of a raw Tensor. Check these sources in order:
+      1. `pooler_output`.
+      2. `last_hidden_state[:, 0]`.
+      3. An attribute scan if the first two sources are unavailable.
+    Return Tensor inputs unchanged.
     """
     if isinstance(x, torch.Tensor):
         return x
@@ -116,7 +122,7 @@ def _box_nms(detections: list[dict], iou_threshold: float) -> list[dict]:
 class SigLIPRescoringWrapper:
     """Wraps a detector to add SigLIP global-image scoring per detection.
 
-    The underlying detector's `score` is replaced by:
+    Replace the underlying detector's `score` with:
       score = w_dino * dino_sim + w_siglip * siglip_sim + w_pred_iou * pred_iou
 
     Requires the inner detector to attach raw scoring components per detection
@@ -126,20 +132,20 @@ class SigLIPRescoringWrapper:
     Args:
         base: any detector with .detect(preprocessed_chw) -> list[dict].
         model_id: HuggingFace SigLIP model. Default `google/siglip-base-patch16-224`
-            (~370 MB; first run downloads to ~/.cache/huggingface/).
+            (~370 MB. First run downloads to ~/.cache/huggingface/).
         positive_prompts: text descriptions of the target object. Cosine to
             these is the SigLIP "positive" similarity (max-over-prompts).
         negative_prompts: text descriptions of distractors (leaves, soil, etc.).
             Cosine to these is the SigLIP "negative" similarity (max-over-prompts).
             siglip_sim = pos_max - neg_max. Set to () to disable the negative term.
         w_dino, w_siglip, w_pred_iou: late-fusion weights. Phase 1.3 default is
-            (0.4, 0.4, 0.2); Phase 2.2 will replace this with a trained MLP.
+            (0.4, 0.4, 0.2). Phase 2.2 will replace this with a trained MLP.
         nms_iou_threshold, max_detections: applied AFTER re-scoring so the
             final ranked set reflects the new fusion, not the original DINOv2 order.
         confidence_threshold: drop detections with new score below this. Use
             0.0 to keep all and let downstream sweep tune.
         min_crop_px: skip SigLIP on crops smaller than this (pixels per side).
-            Tiny crops produce uninformative SigLIP embeddings; we keep the
+            Tiny crops produce uninformative SigLIP embeddings. We keep the
             inner detector's score unchanged for them.
     """
 
@@ -176,7 +182,7 @@ class SigLIPRescoringWrapper:
         self._model = AutoModel.from_pretrained(model_id).eval().to(self._device)
 
         # Pre-encode text prompts once. SigLIP's text branch is heavier than
-        # the image branch; doing this per-image would dominate latency.
+        # the image branch. doing this per-image would dominate latency
         with torch.no_grad():
             text_inputs = self._processor(
                 text=list(positive_prompts) + list(negative_prompts),
@@ -253,7 +259,7 @@ class SigLIPRescoringWrapper:
         # Defensive: detector must attach raw components. If they're missing,
         # treat the existing score as dino_sim and pred_iou=0 — degrades to a
         # weighted sum of (existing_score, siglip) which is still useful but
-        # not the intended Phase 1.3 formula.
+        # not the intended Phase 1.3 formula
         if "dino_sim" not in dets[0]:
             logger.warning(
                 "Inner detector does not attach raw scoring components. "

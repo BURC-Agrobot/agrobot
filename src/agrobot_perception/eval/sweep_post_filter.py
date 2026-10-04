@@ -3,12 +3,12 @@
 sweep_post_filter.py — Cheap post-hoc sweep over (confidence, nms_iou, max_detections).
 
 Why this tool exists:
-  The detector's heavy compute (SAM2 AMG + DINOv2 forward + per-mask scoring)
-  is independent of the post-filter knobs (--confidence, --nms-iou,
-  --max-detections). A naive sweep over 12 combinations would re-run inference
-  12 times — ~10h on NucBox CPU. Instead we run inference once with no filter
-  (`--confidence 0 --nms-iou 0 --max-detections 1000 --detections-jsonl ...`)
-  and replay the post-filter chain in this tool in seconds.
+  SAM2 AMG, DINOv2 inference, and mask scoring do not depend on the final
+  filter settings: --confidence, --nms-iou, and --max-detections.
+  Repeating inference for 12 combinations would take ~10 h on NucBox CPU.
+  Run inference once without a filter:
+  `--confidence 0 --nms-iou 0 --max-detections 1000 --detections-jsonl ...`
+  This tool then repeats the final filter sequence in seconds.
 
 Replays the EXACT post-filter chain from sam2_amg_detector.detect():
   1. score >= confidence
@@ -16,11 +16,11 @@ Replays the EXACT post-filter chain from sam2_amg_detector.detect():
   3. sort by score descending
   4. cap at max_detections
 
-Then computes mAP@0.5 + precision/recall using the same metrics module the live
-eval uses (perception/eval/metrics.py), so results are bit-identical to a full
-re-run had we paid the inference cost.
+Then compute mAP@0.5, precision, and recall with perception/eval/metrics.py.
+Live evaluation uses the same module.
+Results are therefore bit-identical to a complete inference rerun.
 
-Usage (from repo root):
+Usage (from repository root):
   # Step 1: dump raw detections once (~50 min on NucBox CPU)
   AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES="" PYTHONPATH=perception \\
     python3 perception/eval/run_eval.py \\
@@ -44,7 +44,7 @@ Usage (from repo root):
 
 Output: a sorted markdown table of (conf, nms, max_det) → (mAP, prec, rec, n_dets).
 
-Sprint 4: Phase 1.1 — find the free-lunch confidence/cap headroom on the S4.12 config.
+Sprint 4: Phase 1.1. Improve the S4.12 confidence and count limits without repeating inference.
 """
 
 from __future__ import annotations
@@ -190,7 +190,7 @@ def main() -> None:
     print(f"  {len(gt_by_image)} images with GT, {total_gt} total boxes")
     print()
 
-    # Cartesian sweep over the three knobs.
+    # Cartesian sweep over the three knobs
     results = []
     for conf in args.confidence:
         for nms in args.nms_iou:

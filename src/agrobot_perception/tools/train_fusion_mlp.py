@@ -3,14 +3,16 @@
 train_fusion_mlp.py — Train the late-fusion MLP head on dumped train detections.
 
 Workflow (Phase 2.2):
-  1. Build a train-list (e.g. data/train_list.txt) and train_gt.csv from
+  1. Build a train-list (for example, data/train_list.txt) and train_gt.csv from
      data/Laboro-Tomato/annotations/train.json polygons -> bbox.
   2. Run perception/eval/run_eval.py with --siglip --fusion-features-out
      features_train.jsonl over the train list at conf=0 to dump every detection
      with its 7 features attached.
-  3. This script loads the JSONL + train GT, labels each detection as positive
-     (IoU>=0.5 against any GT in the same image) or negative, trains the MLP
-     with BCE loss, saves models/fusion_mlp.pt.
+  3. Load the JSONL file and training GT with this script.
+  4. Label each detection as positive or negative.
+     Positive detections have IoU>=0.5 against any GT in the same image.
+  5. Train the MLP with BCE loss.
+  6. Save models/fusion_mlp.pt.
 
 Why BCE on per-detection IoU>=0.5:
   We want the MLP to output a high score for detections that mAP@0.5 will
@@ -20,7 +22,7 @@ Why BCE on per-detection IoU>=0.5:
 
 Why not class-balanced loss:
   Detection imbalance is mild (typically 30-50% TPs at conf=0, since SAM2 AMG
-  is selective). pos_weight is exposed via --pos-weight if needed.
+  is selective). Use --pos-weight to set pos_weight if needed.
 
 Sprint 4: Phase 2.2.
 """
@@ -91,9 +93,9 @@ def _build_dataset(
             key = str(Path(image_paths[idx]).resolve())
             gts = gt_by_image.get(key, [])
 
-            # Greedy IoU matching at iou_threshold; once a GT is matched it
-            # cannot be claimed by a lower-scoring detection — same convention
-            # as compute_ap_iou_threshold in metrics.py.
+            # Match detections greedily by IoU at iou_threshold
+            # Do not let a lower-scoring detection claim an already matched GT
+            # This matches compute_ap_iou_threshold in metrics.py
             sorted_dets = sorted(
                 obj["detections"], key=lambda d: d["score"], reverse=True,
             )
@@ -165,7 +167,7 @@ def main() -> None:
         logger.error("No detections in dump. Check --features and --image-list.")
         sys.exit(1)
 
-    # Standardize features (mean/std on the train split). Saved with the MLP.
+    # Standardize features (mean/std on the train split). Saved with the MLP
     rng = np.random.default_rng(seed=42)
     perm = rng.permutation(len(y))
     n_val = max(1, int(args.val_frac * len(y)))
@@ -209,7 +211,7 @@ def main() -> None:
         with torch.no_grad():
             val_logits = model(Xv)
             val_loss = F.binary_cross_entropy_with_logits(val_logits, yv, pos_weight=pos_weight).item()
-            # Cheap proxy: AUC via score ordering.
+            # Cheap proxy: AUC via score ordering
             val_probs = torch.sigmoid(val_logits).numpy()
             order = np.argsort(-val_probs)
             tp = (yv.numpy()[order] == 1).cumsum()
@@ -217,8 +219,8 @@ def main() -> None:
             n_pos = max(1, int(yv.sum()))
             precisions = tp / np.maximum(tp + fp, 1)
             recalls = tp / n_pos
-            # np.trapezoid exists in numpy>=2, trapz works in all versions.
-            # Use a manual cumulative rectangle sum to stay version-agnostic.
+            # np.trapezoid exists in numpy>=2, trapz works in all versions
+            # Use a manual cumulative rectangle sum to stay version-agnostic
             val_ap = float(np.sum(np.diff(np.concatenate([[0.0], recalls])) * precisions))
 
         marker = ""

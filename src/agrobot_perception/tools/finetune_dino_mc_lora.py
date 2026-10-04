@@ -4,23 +4,24 @@ finetune_dino_mc_lora.py — Mask-Conditioned LoRA fine-tuning of DINOv2 (Phase 
 
 Why this replaces perception/tools/finetune_dino_lora.py (which collapsed at
 mAP=0.035):
-  The original file had three independent defects that each materially hurt
-  training. We fix all three here so the contribution can be ablated cleanly
-  in the paper:
+  The original file had three independent defects that each harmed training.
+  This file corrects all three so the paper can evaluate their separate effects:
 
   Defect 1 (FIXED here): "Trivial positive" — the original used feature
     dropout on the same anchor as the "augmented view". That is not a SimCLR
-    view; it is noise. We use real image-level augmentations (color jitter,
-    gaussian blur, optional horizontal flip) and treat the patch tokens at the
-    *same spatial location* under two augmentations as the positive pair.
+    view. It is noise.
+    Use image augmentation: color jitter, Gaussian blur, and optional horizontal
+    reflection. The positive pair contains patch tokens at the *same spatial
+    location* under two augmentations.
 
-  Defect 2 (FIXED here): "Box-positive supervision is noisy" — the original
-    used axis-aligned bounding boxes as the per-patch positive mask, so for
-    round tomatoes ~30% of "positive" patches were actually leaf/stem. We
-    rasterize the COCO polygon segmentations from train.json, downsample to
-    the 37x37 DINOv2 patch grid as float coverage weights, and weight every
-    contrastive term by the patch's coverage. Background patches inside the
-    box no longer contribute as positives.
+  Defect 2 (FIXED here): "Box-positive supervision is noisy".
+    The original used axis-aligned boxes as positive masks for patches.
+    For round tomatoes, ~30% of these "positive" patches contained leaves or stems.
+    Rasterize the COCO polygon segmentations from train.json.
+    Reduce them to float coverage weights on the 37x37 DINOv2 patch grid.
+    Weight every contrastive term by its patch coverage.
+
+    Background patches inside the box no longer contribute as positives.
 
   Defect 3 (FIXED here): "NT-Xent denominator double-counts the positive"
     `loss = pos_sim - logsumexp(cat([pos_sim], all_sims))` had pos_sim already
@@ -42,7 +43,7 @@ Loss formulation (canonical SimCLR / NT-Xent, mask-weighted):
                                              the polygon mask
     view_A_i    : (1369, D) DINOv2 patch tokens of augmented view A
     view_B_i    : (1369, D) DINOv2 patch tokens of augmented view B
-                  (A and B differ in color/blur; horizontal flip is applied
+                  (A and B differ in color/blur. Horizontal flip is applied
                   symmetrically so positions still correspond when we undo it)
 
   For each spatial position p:
@@ -81,7 +82,7 @@ After training, rebuild the query embedding with the LoRA backbone:
     --dino-lora-path models/dino_mc_lora.pt
 
 Then sweep --confidence in {0.10, 0.15, 0.20, 0.25, 0.30, 0.35} via the
-post-filter sweep tool. Cosine score scale shifts after adaptation; the same
+post-filter sweep tool. Cosine score scale shifts after adaptation. The same
 numerical threshold from S4.12 is meaningless.
 """
 
@@ -125,7 +126,7 @@ def _select_device() -> torch.device:
     return torch.device("cpu")
 
 
-# ── LoRA injection — reused from finetune_dino_lora for adapter compatibility ─
+# LoRA injection — reused from finetune_dino_lora for adapter compatibility ─
 
 def _inject_lora_qkv(model: nn.Module, rank: int, lora_blocks: int) -> nn.Module:
     """Same module surgery as finetune_dino_lora.inject_lora — kept here so the
@@ -136,7 +137,7 @@ def _inject_lora_qkv(model: nn.Module, rank: int, lora_blocks: int) -> nn.Module
     DINOv2 transformer blocks. Freezes everything else.
     """
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from finetune_dino_lora import LoRALinear  # adapter module
+    from finetune_dino_lora import LoRALinear  # Adapter module
 
     for p in model.parameters():
         p.requires_grad_(False)
@@ -153,7 +154,7 @@ def _inject_lora_qkv(model: nn.Module, rank: int, lora_blocks: int) -> nn.Module
     return model
 
 
-# ── Polygon -> letterboxed coverage ───────────────────────────────────────────
+# Polygon -> letterboxed coverage
 
 def _letterbox(bgr: np.ndarray) -> tuple[np.ndarray, float, int, int]:
     orig_h, orig_w = bgr.shape[:2]
@@ -187,7 +188,7 @@ def _polygons_to_coverage(
     return blocks.mean(axis=(1, 3))  # (37, 37)
 
 
-# ── Real image augmentations ─────────────────────────────────────────────────
+# Real image augmentations
 
 def _augment_image(rgb: np.ndarray, rng: np.random.Generator,
                    flip: bool) -> np.ndarray:
@@ -199,7 +200,7 @@ def _augment_image(rgb: np.ndarray, rng: np.random.Generator,
     """
     img = rgb.astype(np.float32)
 
-    # Color jitter: small per-channel multiplicative + additive shift.
+    # Color jitter: small per-channel multiplicative + additive shift
     bright = rng.uniform(0.85, 1.15)
     contrast = rng.uniform(0.85, 1.15)
     img = (img - 128.0) * contrast + 128.0
@@ -213,7 +214,7 @@ def _augment_image(rgb: np.ndarray, rng: np.random.Generator,
     hsv[..., 1] = np.clip(hsv[..., 1] * sat, 0, 255)
     img = cv2.cvtColor(np.clip(hsv, 0, 255).astype(np.uint8), cv2.COLOR_HSV2RGB).astype(np.float32)
 
-    # Gaussian blur with small probability.
+    # Gaussian blur with small probability
     if rng.random() < 0.4:
         ksize = int(rng.choice([3, 5]))
         img = cv2.GaussianBlur(img, (ksize, ksize), 0)
@@ -231,7 +232,7 @@ def _to_tensor(rgb: np.ndarray) -> torch.Tensor:
     return torch.from_numpy(np.transpose(f, (2, 0, 1)))
 
 
-# ── Data loading ──────────────────────────────────────────────────────────────
+# Data loading
 
 def _load_records_one(coco_json: Path, images_dir: Path) -> list[dict]:
     """Load records from a single COCO JSON file."""
@@ -269,9 +270,9 @@ def _load_records(
     """Load + union polygons from one or more COCO JSON files (Phase 3.2 uses
     GT polygons + self-training pseudo polygons in the second cycle).
 
-    Records with the same file_name across JSONs are MERGED: their polygon
-    lists are concatenated. Identical polygons across JSONs are not deduped
-    because the rasterized union of overlapping polygons is the same mask.
+    Merge records that have the same file_name across JSON files.
+    Concatenate their polygon lists.
+    Keep identical polygons because rasterizing their union gives the same mask.
     """
     by_path: dict[str, dict] = {}
     for j in coco_jsons:
@@ -293,7 +294,7 @@ def _load_records(
     return records
 
 
-# ── Mask-conditioned NT-Xent (batched, cross-image, no double-counted positive) ─
+# Mask-conditioned NT-Xent (batched, cross-image, no double-counted positive) ─
 
 def _mc_nt_xent(
     anchors: torch.Tensor,        # (B*K, D)   L2-normalised
@@ -321,7 +322,7 @@ def _mc_nt_xent(
     if N == 0 or positives.shape[0] != N:
         return torch.zeros((), device=anchors.device, requires_grad=True)
 
-    # Combined "all candidates" set.
+    # Combined "all candidates" set
     all_cands = torch.cat([positives, background], dim=0)  # (N + M, D)
     s = (anchors @ all_cands.T) / temperature              # (N, N+M)
 
@@ -329,10 +330,10 @@ def _mc_nt_xent(
     # positives[i] are different views of the same patch, so anchor i must NOT
     # see positives[i] as a negative — it is the actual positive (handled by
     # log_softmax pointing index i at it). The diagonal of s[:, :N] would be
-    # exactly that pair, so leaving it as-is is correct (it is the positive).
+    # exactly that pair, so leaving it as-is is correct (it is the positive)
     # We still must mask anchor-vs-OWN-position when both are background — but
     # that does not happen because background patches are disjoint from anchor
-    # positions by construction.
+    # positions by construction
 
     log_probs = s.log_softmax(dim=1)
     pos_log_probs = log_probs[torch.arange(N, device=anchors.device),
@@ -342,7 +343,7 @@ def _mc_nt_xent(
     return weighted.sum() / denom
 
 
-# ── Training step ─────────────────────────────────────────────────────────────
+# Training step
 
 def _sample_positions(
     coverage: np.ndarray,
@@ -429,9 +430,9 @@ def train(
         for start in bar:
             batch_recs = records[start:start + batch_size]
 
-            # Build views A and B for each image in batch + sample positions.
+            # Build views A and B for each image in batch + sample positions
             tensors_a, tensors_b = [], []
-            anchors_meta: list[dict] = []  # one per image; positions and flip flag
+            anchors_meta: list[dict] = []  # One per image. positions and flip flag
             valid_recs = []
 
             for rec in batch_recs:
@@ -450,7 +451,7 @@ def train(
                 if len(pos_idx) == 0:
                     continue
 
-                # Two augmented views; B optionally flipped.
+                # Two augmented views. B optionally flipped
                 view_a = _augment_image(rgb_box, rng, flip=False)
                 flip_b = use_hflip and rng.random() < 0.5
                 view_b = _augment_image(rgb_box, rng, flip=flip_b)
@@ -466,13 +467,13 @@ def train(
                 valid_recs.append(rec)
 
             if len(tensors_a) < 2:
-                # Need at least two images for cross-image negatives to mean anything.
+                # Need at least two images for cross-image negatives to mean anything
                 continue
 
             batch_a = torch.stack(tensors_a).to(device)  # (B, 3, 518, 518)
             batch_b = torch.stack(tensors_b).to(device)
 
-            # One forward per view (torch.cat the two batches for a single forward).
+            # One forward per view (torch.cat the two batches for a single forward)
             combined = torch.cat([batch_a, batch_b], dim=0)  # (2B, 3, 518, 518)
             features = dino.forward_features(combined)
             patch_tokens = features["x_norm_patchtokens"]  # (2B, 1369, D)
@@ -483,7 +484,7 @@ def train(
             tokens_b = patch_norms[B:]
 
             # Gather anchor (view_A), positive (view_B at same/flipped pos),
-            # and negative (view_A at clear-bg pos) embeddings per image.
+            # and negative (view_A at clear-bg pos) embeddings per image
             anchor_list, positive_list, bg_list, weight_list = [], [], [], []
             for i, meta in enumerate(anchors_meta):
                 pos_idx = torch.from_numpy(meta["pos_idx"]).to(device)

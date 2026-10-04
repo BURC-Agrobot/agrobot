@@ -4,14 +4,14 @@ train_yolo_baseline.py — Supervised YOLOv8n baseline on Laboro Tomato (Phase 3
 
 Why this exists for the paper:
   YOLOv8n is the de facto "small supervised single-stage detector" baseline.
-  Without it the foundation-model numbers cannot be contextualised — reviewers
-  will ask "what does fully supervised get?" and the answer must be a single
-  number from the same val split with the same metric.
+  This baseline gives context for the foundation-model results.
+  Reviewers need one fully supervised result from the same validation split
+  with the same metric.
 
 What this does NOT touch:
-  No model surgery, no exotic augmentation, no extended training schedule.
-  We use the ultralytics defaults so the comparison is the well-known YOLOv8n
-  baseline anybody can reproduce, not a tuned competitor.
+  Use the ultralytics defaults to reproduce the standard YOLOv8n baseline.
+  Do not change the model structure, add unusual augmentation, or extend training.
+  This comparison uses the standard baseline without additional tuning.
 
 YAML written automatically. The standard ultralytics layout:
   data/Laboro-Tomato/
@@ -57,9 +57,9 @@ def _write_dataset_yaml(repo_root: Path) -> Path:
     We collapse to single-class for paper comparability with our zero-shot
     pipeline — the comparison is always 'tomato vs not tomato'.
 
-    To do the collapse without rewriting label files, we override the class
-    map: train.yaml lists 1 class and ultralytics ignores the original
-    integer class IDs as long as the labels exist.
+    To combine classes without rewriting label files, override the class map.
+    train.yaml lists 1 class.
+    ultralytics ignores the original integer class IDs as long as labels exist.
 
     Caveat: ultralytics actually reads the integer class. To collapse cleanly
     we write a sibling label dir (train_labels_1cls/, val_labels_1cls/) with
@@ -76,18 +76,18 @@ def _write_dataset_yaml(repo_root: Path) -> Path:
                 parts = line.strip().split()
                 if len(parts) < 5:
                     continue
-                # Collapse class id to 0; keep the rest of the line.
+                # Collapse class id to 0. Keep the rest of the line
                 new_lines.append(" ".join(["0"] + parts[1:]))
             (dst / label_file.name).write_text("\n".join(new_lines) + "\n")
 
     # YOLO needs symlinks (or moved data) so that for each images/<x>.jpg,
     # there is a labels/<x>.txt sibling. Easiest hack: write a yaml that points
     # to symlinked label dirs. We create labels_1cls and tell ultralytics where
-    # to find them via 'train' / 'val' image roots and relative label dirs.
-    # ultralytics resolves labels by replacing 'images' -> 'labels' in the path.
-    # So we ALSO need to provide an alt image root that has labels next to it.
-    # Easiest: symlink images dir alongside labels_1cls and call it images.
-    # We do that here.
+    # to find them via 'train' / 'val' image roots and relative label dirs
+    # Ultralytics resolves labels by replacing 'images' -> 'labels' in the path
+    # So we ALSO need to provide an alt image root that has labels next to it
+    # Easiest: symlink images dir alongside labels_1cls and call it images
+    # We do that here
     for split in ("train", "val"):
         alt_root = out_dir / split / "yolo_1cls"
         alt_root.mkdir(parents=True, exist_ok=True)

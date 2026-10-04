@@ -3,12 +3,12 @@ tomato_detector_node.py — Tomato Detection ROS 2 Node
 
 Architecture
 ------------
-This node is the central perception pipeline entry point for Agrobot TOM v2.
-It follows the "thin node, thick library" pattern:
-  - The ROS 2 node itself (this file) is kept minimal: subscribe, preprocess,
-    call detector, publish. No business logic here.
-  - All image processing lives in `utils/image_utils.py`.
-  - The detector is a pluggable backend (Placeholder → DINOv2+SAM2 in Sprint 2).
+This node is the main entry point for perception in Agrobot TOM v2.
+The node provides the ROS interface, and libraries provide processing:
+  - This file subscribes, preprocesses images, calls the detector, and publishes
+    results. It contains no application logic.
+  - `utils/image_utils.py` contains all image processing.
+  - The detector is replaceable: Placeholder → DINOv2+SAM2 in Sprint 2.
 
 Data Flow
 ---------
@@ -97,10 +97,10 @@ from agrobot_perception.detectors.sam2_amg_detector import (
 )
 
 
-# ─── QoS Profiles ─────────────────────────────────────────────────────────────
+# QoS Profiles
 # Camera topics from real sensors use "Best Effort" reliability — they drop
 # frames rather than queue them. Using Reliable QoS here would cause a
-# QoS compatibility mismatch warning and the subscription would receive nothing.
+# QoS compatibility mismatch warning and the subscription would receive nothing
 SENSOR_QOS = QoSProfile(
     reliability=QoSReliabilityPolicy.BEST_EFFORT,
     history=QoSHistoryPolicy.KEEP_LAST,
@@ -129,10 +129,10 @@ class TomatoDetectorNode(Node):
     def __init__(self) -> None:
         super().__init__("tomato_detector")
 
-        # ── Parameters ────────────────────────────────────────────────────────
+        # Parameters
         # Declare all parameters with defaults. Users can override via:
         #   ros2 run agrobot_perception tomato_detector --ros-args -p confidence_threshold:=0.7
-        # Or in a launch file (see launch/perception.launch.py).
+        # Or in a launch file (see launch/perception.launch.py)
         self.declare_parameter("confidence_threshold", 0.35)
         self.declare_parameter("input_width", 518)
         self.declare_parameter("input_height", 518)
@@ -140,12 +140,12 @@ class TomatoDetectorNode(Node):
         self.declare_parameter("depth_topic", "")
         self.declare_parameter("depth_camera_info_topic", "")
         # Watchdog: if no camera frame arrives within this window, publish
-        # empty detections and safe_to_pick=False (FM-1 in FAILURE_MODES.md).
-        # Set to 0 to disable the watchdog entirely.
-        # Watchdog timeout must exceed worst-case inference time (~17s on CPU).
-        # Default 60s prevents false-positives during SAM2+DINOv2 processing.
+        # empty detections and safe_to_pick=False (FM-1 in FAILURE_MODES.md)
+        # Set to 0 to disable the watchdog entirely
+        # Watchdog timeout must exceed worst-case inference time (~17s on CPU)
+        # Default 60s prevents false-positives during SAM2+DINOv2 processing
         self.declare_parameter("watchdog_timeout_ms", 60000)
-        # SAM2AMGDetector parameters — GPU ablation best config (2026-05-21).
+        # SAM2AMGDetector parameters — GPU ablation best config (2026-05-21)
         # Override at launch: ros2 launch ... amg_points_per_side:=32
         self.declare_parameter("amg_points_per_side", 32)
         self.declare_parameter("max_detections", 30)
@@ -155,8 +155,8 @@ class TomatoDetectorNode(Node):
         self.declare_parameter("query_embedding_path", "models/query_embedding_k4.pt")
         self.declare_parameter("negative_embedding_path", "models/negative_embedding.pt")
         self.declare_parameter("sam2_checkpoint", "")
-        # SigLIP + Fusion MLP pipeline (eval-matched, full accuracy).
-        # Set siglip_enabled:=false to fall back to DINOv2-only scoring.
+        # SigLIP + Fusion MLP pipeline (eval-matched, full accuracy)
+        # Set siglip_enabled:=false to otherwise use DINOv2-only scoring
         self.declare_parameter("siglip_enabled", True)
         self.declare_parameter("siglip_model", "google/siglip-base-patch16-224")
         self.declare_parameter("fusion_mlp_path", "models/fusion_mlp.pt")
@@ -164,15 +164,16 @@ class TomatoDetectorNode(Node):
         self.declare_parameter("siglip_dino_weight", 0.4)
         self.declare_parameter("siglip_weight", 0.4)
         self.declare_parameter("siglip_pred_iou_weight", 0.2)
-        # Pipe-separated overrides for SigLIP text prompts. Empty = built-in defaults.
+        # Pipe-separated overrides for SigLIP text prompts. Empty = built-in defaults
         # In scenes with green foliage but only ripe red tomatoes, remove the
-        # "green unripe tomato" positive prompt — it co-fires with leaves.
+        # "green unripe tomato" positive prompt — it co-fires with leaves
         self.declare_parameter("siglip_positive_prompts", "")
         self.declare_parameter("siglip_negative_prompts", "")
-        # Optional red-color post-filter (FM-7: leaf-wall false-positives).
-        # When enabled, detections whose bbox crop contains <min_red_fraction
-        # red-saturated pixels are dropped. The MLP's HSV features alone do not
-        # strongly bias against green in single-ripe scenes — this is a hard prior.
+        # Optional red-color post-filter (FM-7: leaf-wall false-positives)
+        # When enabled, remove detections with red coverage below min_red_fraction
+        # Measure coverage as the fraction of red-saturated pixels in the box crop
+        # The MLP HSV features alone do not strongly reject green in single-ripe scenes
+        # This filter applies a fixed color requirement
         self.declare_parameter("color_filter_enabled", False)
         self.declare_parameter("color_min_red_fraction", 0.15)
         self.declare_parameter("color_red_hue_max", 12)        # OpenCV H in [0, 180]
@@ -204,7 +205,7 @@ class TomatoDetectorNode(Node):
         _neg_emb = self.get_parameter("negative_embedding_path").value or None
         _sam2_ckpt = self.get_parameter("sam2_checkpoint").value or None
 
-        # ── Core Components ───────────────────────────────────────────────────
+        # Core Components
         self._bridge = CvBridge()
         _device = _select_device()
         _siglip_enabled = self.get_parameter("siglip_enabled").value
@@ -212,9 +213,9 @@ class TomatoDetectorNode(Node):
         _max_det = self.get_parameter("max_detections").value
 
         # When the SigLIP+MLP pipeline is active, confidence_threshold=0.0 lets
-        # all SAM2 proposals reach the MLP; the MLP's own threshold gates the
+        # all SAM2 proposals reach the MLP. The MLP's own threshold gates the
         # final output. When DINOv2-only, the raw DINOv2 confidence_threshold
-        # is the gate.
+        # is the gate
         _base_conf = 0.0 if _siglip_enabled else self._conf_threshold
 
         self._detector = SAM2AMGDetector(
@@ -249,9 +250,8 @@ class TomatoDetectorNode(Node):
                 _neg_raw = self.get_parameter("siglip_negative_prompts").value or ""
                 _pos_prompts = tuple(p.strip() for p in _pos_raw.split("|") if p.strip())
                 _neg_prompts = tuple(p.strip() for p in _neg_raw.split("|") if p.strip())
-                # Build kwargs so SigLIPRescoringWrapper's built-in defaults stay
-                # the source of truth when no override is supplied. Passing an
-                # empty tuple here would silently disable the prompt set.
+                # Build kwargs to retain SigLIPRescoringWrapper defaults without overrides
+                # An empty tuple would silently disable the prompt set
                 _siglip_kwargs = {}
                 if _pos_prompts:
                     _siglip_kwargs["positive_prompts"] = _pos_prompts
@@ -296,7 +296,7 @@ class TomatoDetectorNode(Node):
                     f"confidence_threshold={self._conf_threshold:.2f}."
                 )
                 # Re-create base detector with the raw confidence threshold so
-                # DINOv2-only mode gates correctly.
+                # DINOv2-only mode gates correctly
                 self._detector = SAM2AMGDetector(
                     device=_device,
                     confidence_threshold=self._conf_threshold,
@@ -310,7 +310,7 @@ class TomatoDetectorNode(Node):
                     sam2_checkpoint=_sam2_ckpt,
                 )
 
-        # ── Subscribers ───────────────────────────────────────────────────────
+        # Subscribers
         self._image_sub = self.create_subscription(
             Image,
             "/camera/image_raw",
@@ -332,14 +332,14 @@ class TomatoDetectorNode(Node):
                 Detection3DArray, "/agrobot/detections_3d", 10
             )
 
-        # ── Publishers ────────────────────────────────────────────────────────
+        # Publishers
         self._detections_pub = self.create_publisher(
             Detection2DArray,
             "/agrobot/detections",
             10,
         )
-        # safe_to_pick: False when no detections or watchdog triggered.
-        # The arm planner subscribes here to gate pick attempts.
+        # safe_to_pick: False when no detections or watchdog triggered
+        # The arm planner subscribes here to gate pick attempts
         self._safe_to_pick_pub = self.create_publisher(
             Bool,
             "/agrobot/safe_to_pick",
@@ -353,7 +353,7 @@ class TomatoDetectorNode(Node):
                 1,
             )
 
-        # ── Watchdog timer ────────────────────────────────────────────────────
+        # Watchdog timer
         if self._watchdog_timeout_ms > 0:
             self._watchdog_timer = self.create_timer(
                 self._watchdog_timeout_ms / 1000.0,
@@ -379,13 +379,13 @@ class TomatoDetectorNode(Node):
         )
 
     def _watchdog_callback(self) -> None:
-        """Fires if no camera frame has arrived within watchdog_timeout_ms.
+        """Run if no camera frame arrived within watchdog_timeout_ms.
 
         Publishes empty detections + safe_to_pick=False so the planner gets
         an explicit signal rather than silence. See FM-1 in docs/FAILURE_MODES.md.
         """
         if self._last_frame_time == 0.0:
-            # Node just started, no frame ever received yet — don't alarm.
+            # Node just started, no frame ever received yet — don't alarm
             return
 
         elapsed_ms = (time.monotonic() - self._last_frame_time) * 1000.0
@@ -408,12 +408,14 @@ class TomatoDetectorNode(Node):
     def _bbox_redness(self, bgr_frame: np.ndarray, bbox_518: list[float]) -> float:
         """Return the fraction [0,1] of bbox pixels that look saturated-red.
 
-        The detector returns boxes in 518×518 letterboxed space. This helper
-        un-letterboxes back to the native BGR frame, then masks pixels whose
-        OpenCV hue lies in the red band (red wraps H=0/180) with high enough
-        saturation and value to exclude shadow noise. Cheap (~µs per box) and
-        operates on raw camera pixels, not the ImageNet-normalised tensor — so
-        the colour stats are not corrupted by ViT preprocessing.
+        The detector returns boxes in 518×518 letterboxed space.
+        Reverse the letterbox transform to recover native BGR coordinates.
+        Select pixels in the OpenCV red hue band, which wraps at H=0/180.
+        Require sufficient saturation and value to exclude shadow noise.
+
+        Processing takes ~µs per box and uses raw camera pixels.
+        It does not use the ImageNet-normalised tensor.
+        ViT preprocessing therefore does not distort the color statistics.
         """
         h, w = bgr_frame.shape[:2]
         iw, ih = self._input_size
@@ -469,7 +471,7 @@ class TomatoDetectorNode(Node):
             ]
             if n_before > 0 and not detections:
                 # Surface the best red-score seen so operators can tune the threshold
-                # without re-running with debug logging enabled.
+                # without running again with debug logging enabled
                 best = max(scored, key=lambda kv: kv[1])
                 self.get_logger().info(
                     f"Color filter dropped all {n_before} detections "
@@ -484,7 +486,7 @@ class TomatoDetectorNode(Node):
 
         self._publish_detections(detections, msg.header)
         # Explicit safe_to_pick signal every frame — planner doesn't need to
-        # infer from detection count; it reads this directly.
+        # infer from detection count. It reads this directly
         self._publish_safe_to_pick(len(detections) > 0)
 
         if self._depth_image is not None and self._depth_K is not None and detections:
@@ -504,14 +506,14 @@ class TomatoDetectorNode(Node):
             detection = Detection2D()
             detection.header = header
 
-            # Bounding box center + size (vision_msgs convention).
+            # Bounding box center + size (vision_msgs convention)
             x1, y1, x2, y2 = det["box"]
             detection.bbox.center.position.x = float((x1 + x2) / 2)
             detection.bbox.center.position.y = float((y1 + y2) / 2)
             detection.bbox.size_x = float(x2 - x1)
             detection.bbox.size_y = float(y2 - y1)
 
-            # Hypothesis: class label + confidence.
+            # Hypothesis: class label + confidence
             hypothesis = ObjectHypothesisWithPose()
             hypothesis.hypothesis.class_id = det["label"]
             hypothesis.hypothesis.score = float(det["score"])

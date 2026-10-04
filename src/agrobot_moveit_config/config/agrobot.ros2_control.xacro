@@ -5,7 +5,7 @@
 
         <ros2_control name="${name}" type="system">
             <hardware>
-                <!-- By default, set up controllers for simulation. This won't work on real hardware -->
+                <!-- Configure controllers for simulation by default. This configuration cannot control real hardware -->
                 <plugin>mock_components/GenericSystem</plugin>
             </hardware>
             <joint name="arm_joint_1">

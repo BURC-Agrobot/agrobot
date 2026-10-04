@@ -2,16 +2,21 @@
 """
 generate_pseudo_labels.py — Phase 3.2 self-training pseudo-label generator.
 
-Runs the current best detector on the train set (no GT labels needed at
-inference time), keeps high-confidence detections, converts masks to COCO
-polygons, and writes a new COCO JSON. The LoRA trainer
-(finetune_dino_mc_lora.py) can then ingest both the original train.json AND
-this pseudo JSON via --coco-json + --coco-json-aux for a self-training cycle.
+This tool follows these steps:
+  1. Run the current best detector on the training set without GT labels
+     during inference.
+  2. Keep detections with high confidence.
+  3. Convert masks to COCO polygons.
+  4. Write a new COCO JSON file.
+
+The LoRA trainer (finetune_dino_mc_lora.py) can use both JSON files for self-training.
+Supply the original train.json with --coco-json.
+Supply the pseudo-label JSON with --coco-json-aux.
 
 Filtering criteria (defaults match the plan):
-  score   >= --tau-score        (e.g. 0.45 — well above the deploy threshold)
-  pred_iou >= --tau-pred-iou    (e.g. 0.85 — SAM2 confident in mask shape)
-  area in [--min-area, --max-area]  (e.g. [200, 30000] px in 518² space)
+  score   >= --tau-score        (for example, 0.45 — well above the deploy threshold)
+  pred_iou >= --tau-pred-iou    (for example, 0.85 — SAM2 confident in mask shape)
+  area in [--min-area, --max-area]  (for example, [200, 30000] px in 518² space)
 
 These thresholds are intentionally STRICT. Self-training works only when the
 pseudo-labels are clean enough that the model gains representation rather than

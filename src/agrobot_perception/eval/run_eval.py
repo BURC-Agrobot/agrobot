@@ -5,7 +5,7 @@ run_eval.py — Run the tomato detector on a validation set and report metrics.
 Sprint 2: mAP@0.5 (if ground truth provided), latency mean/p99, and per-image
 detection counts. Used for ablation (DINOv2-only vs DINOv2+SAM2) and REPRODUCE.md.
 
-Usage (from repo root):
+Usage (from repository root):
   PYTHONPATH=perception python perception/eval/run_eval.py --val-list data/val_list.txt
   PYTHONPATH=perception python perception/eval/run_eval.py --val-list data/val_list.txt --gt-csv data/val_gt.csv
   PYTHONPATH=perception python perception/eval/run_eval.py --val-list data/val_list.txt --detector dino_only
@@ -16,7 +16,7 @@ Inside Docker:
 With visualizations (HTML report + annotated images):
   ... --visualize-dir eval_reports/run_001
 
-Requires: AGROBOT_ROOT or run from repo root so models/sam2/ and torch.hub resolve.
+Requires: AGROBOT_ROOT or run from repository root so models/sam2/ and torch.hub resolve.
 """
 
 from __future__ import annotations
@@ -415,11 +415,10 @@ def main() -> None:
     # Wrapper composition order (innermost → outermost):
     #   base detector  →  mask-refine  →  SigLIP re-score  →  TTA
     # Rationale:
-    #   - mask-refine improves IoU and re-scores with the same DINOv2 formula;
-    #     must happen before SigLIP because SigLIP scores the cropped *bbox*
-    #     and we want SigLIP to see the refined bbox.
-    #   - SigLIP re-scores with a richer fusion; must be inside TTA so each
-    #     TTA pass's NMS keeps the best of *fused* scores, not raw DINOv2.
+    # Refine masks before SigLIP so it scores the refined bounding box
+    # Mask refinement improves IoU and reuses the DINOv2 scoring formula
+    # SigLIP combines more scores and must run inside TTA
+    # Each TTA pass then applies NMS to fused scores instead of raw DINOv2 scores
     if args.mask_refine:
         from eval.mask_refine import MaskRefineWrapper
         detector = MaskRefineWrapper(detector)
@@ -428,7 +427,7 @@ def main() -> None:
     # When --fusion-mlp is active, the SigLIP wrapper must NOT gate by confidence —
     # that gate must be applied by the MLP wrapper so it fires on MLP probabilities,
     # not on the intermediate DINOv2+SigLIP blended score. Passing confidence_threshold=0
-    # to SigLIP here lets every proposal through to the MLP.
+    # to SigLIP here lets every proposal through to the MLP
     siglip_conf = 0.0 if args.fusion_mlp else args.confidence
     if args.siglip:
         from eval.siglip_rescoring import SigLIPRescoringWrapper
@@ -446,11 +445,11 @@ def main() -> None:
               f"w_siglip={args.siglip_w_siglip}, w_pred_iou={args.siglip_w_pred_iou})")
 
     if args.fusion_mlp:
-        # --mlp-confidence gates on MLP probability (0–1).
+        # mlp-confidence gates on MLP probability (0–1)
         # Falls back to --confidence if --mlp-confidence was not explicitly set,
         # and to 0.0 (no gate) if neither was set. This lets users write:
         #   --confidence 0.0 --mlp-confidence 0.40
-        # to let all SAM2 proposals reach the MLP, then threshold on MLP output.
+        # to let all SAM2 proposals reach the MLP, then threshold on MLP output
         mlp_conf = args.mlp_confidence if args.mlp_confidence is not None else args.confidence
         from eval.fusion_mlp import FusionMLPWrapper
         detector = FusionMLPWrapper(
@@ -464,7 +463,7 @@ def main() -> None:
         print(f"  Fusion MLP loaded: {args.fusion_mlp}  (mlp-confidence={mlp_conf:.2f})")
 
     if args.fusion_features_out:
-        # Wrap last so the dump captures whatever the upstream chain produced.
+        # Wrap last so the dump captures whatever the upstream chain produced
         from eval.fusion_mlp import FeatureDumpWrapper
         out_p = args.fusion_features_out if args.fusion_features_out.is_absolute() \
             else repo_root / args.fusion_features_out
@@ -572,8 +571,8 @@ def main() -> None:
     print(f"  p99:    {p99_ms:.2f} ms")
     print(f"  Detector: {args.detector}")
 
-    # mAP if we have GT — legacy mAP50 always computed for sprint comparability;
-    # COCO suite computed additionally when --metric coco is set.
+    # mAP if we have GT — legacy mAP50 always computed for sprint comparability
+    # COCO suite computed additionally when --metric coco is set
     ap, prec, rec = 0.0, 0.0, 0.0
     coco_metrics: dict[str, float] = {}
     if gt_by_image:
@@ -615,7 +614,7 @@ def main() -> None:
     if args.detections_jsonl:
         # JSONL is the right format here: one line per image, append-friendly,
         # streaming-readable. Each line carries the image's resolved path so the
-        # downstream sweep can join against gt_by_image without re-reading val_list.
+        # downstream sweep can join against gt_by_image without re-reading val_list
         import json
         out_path = args.detections_jsonl if args.detections_jsonl.is_absolute() \
             else repo_root / args.detections_jsonl

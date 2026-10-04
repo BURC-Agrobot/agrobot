@@ -11,9 +11,10 @@ picking pipeline:
 
 Architecture
 ------------
-AgroVizNode spins in a daemon thread (rclpy.spin).  All 11 ROS callbacks write
-into threading.Lock-protected state dicts/deques.  Four QTimers on the Qt main
-thread read from that state — no Qt calls are ever made from inside a callback.
+AgroVizNode runs in a daemon thread with rclpy.spin.
+All 11 ROS callbacks write to state dictionaries and deques under threading.Lock.
+Four QTimers on the Qt main thread read that state.
+ROS callbacks never call Qt.
 
 Target environment: [NUCBOX] — run inside the ROCm Docker container with a
 live pipeline (detector → spatial → tracker → qwen_vl) already publishing.
@@ -43,7 +44,7 @@ Subscribed topics (11)
   /agrobot/mark_picked              std_msgs/String (JSON {"persistent_id": N})
 """
 
-# requires: PyQt5, cv_bridge, rclpy, sensor_msgs, vision_msgs, geometry_msgs, std_msgs
+# Requires: PyQt5, cv_bridge, rclpy, sensor_msgs, vision_msgs, geometry_msgs, std_msgs
 
 from __future__ import annotations
 
@@ -100,7 +101,7 @@ from PyQt5.QtWidgets import (
 )
 
 
-# ─── Named constants ───────────────────────────────────────────────────────────
+# Named constants
 
 MODEL_INPUT_SIZE = 518      # DINOv2: 37 × 14 px — baked into preprocess_for_dino()
 MAX_LOG_ENTRIES  = 200
@@ -108,14 +109,14 @@ CATALOG_COLS     = 4
 CARD_IMAGE_W, CARD_IMAGE_H = 72, 72
 CARD_W,       CARD_H       = 112, 158
 HEALTH_TIMEOUT_S = 10.0
-METRICS_WINDOW   = 30       # rolling window for per-frame detection rate
-# Demo-friendly catalog turnover: drop LOST cards 20 s after they go missing.
-# Picked cards are never auto-evicted (session history).
+METRICS_WINDOW   = 30       # Rolling window for per-frame detection rate
+# Demo-friendly catalog turnover: drop LOST cards 20 s after they go missing
+# Picked cards are never auto-evicted (session history)
 LOST_CARD_TTL_S  = 20.0
 
-# Camera topics from RealSense publish with BEST_EFFORT reliability.
+# Camera topics from RealSense publish with BEST_EFFORT reliability
 # A RELIABLE subscription here causes a QoS mismatch — the node would
-# subscribe successfully but receive zero messages.
+# subscribe successfully but receive zero messages
 SENSOR_QOS = QoSProfile(
     reliability=QoSReliabilityPolicy.BEST_EFFORT,
     history=QoSHistoryPolicy.KEEP_LAST,
@@ -140,15 +141,14 @@ _QT_GRAY  = "#757575"
 _APP_TITLE = "Agrobot TOM v2 — Perception Dashboard"
 
 
-# ─── Helpers ───────────────────────────────────────────────────────────────────
+# Helpers
 
 def _unletterbox_pt(
     x: float, y: float, orig_w: int, orig_h: int
 ) -> Tuple[float, float]:
     """Reverse the letterbox applied by resize_with_aspect() in image_utils.py.
 
-    resize_with_aspect scales to fit 518×518 with centred black padding;
-    this undoes that transform to recover native image coordinates.
+    resize_with_aspect scales to fit 518×518 with centred black padding. This undoes that transform to recover native image coordinates.
     """
     scale = min(MODEL_INPUT_SIZE / orig_w, MODEL_INPUT_SIZE / orig_h)
     new_w = int(orig_w * scale)
@@ -177,8 +177,9 @@ def _project_to_native(
 def _bgr_to_qimage(bgr: np.ndarray) -> QImage:
     """Convert an OpenCV BGR frame to a QImage backed by its own data copy.
 
-    .copy() is required — without it, QImage holds a raw pointer into the
-    numpy buffer which may be deallocated before Qt renders the frame.
+    Call .copy() to give QImage its own data.
+    Otherwise, QImage holds a raw pointer into the numpy buffer.
+    The buffer may be deallocated before Qt renders the frame.
     """
     rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
     h, w, ch = rgb.shape
@@ -186,7 +187,7 @@ def _bgr_to_qimage(bgr: np.ndarray) -> QImage:
 
 
 def _decode_b64_jpeg(b64: Optional[str]) -> Optional[np.ndarray]:
-    """Decode a base64 JPEG to a BGR ndarray; returns None on any failure."""
+    """Decode a base64 JPEG to a BGR ndarray. Returns None on any failure."""
     if not b64:
         return None
     try:
@@ -200,20 +201,23 @@ def _decode_b64_jpeg(b64: Optional[str]) -> Optional[np.ndarray]:
 def _extract_per_id_reasoning(text: str) -> Dict[int, str]:
     """Split a VLM response into per-persistent_id snippets.
 
-    The prompt asks the model to identify imposters by ID ("Tomato 0 is an
-    apple, Tomato 1 is real..."). We split the response into sentences and
-    associate each sentence with whichever Tomato numbers it mentions. A
-    sentence that mentions multiple IDs (e.g. "Tomato 0 and Tomato 1 are
-    imposters") attaches to all of them. Returns {pid: trimmed_snippet}.
+    The prompt asks the model to identify imposters by ID.
+    Example: "Tomato 0 is an apple, Tomato 1 is real...".
+    Split the response into sentences.
+    Associate each sentence with every Tomato number that it mentions.
+    For example, "Tomato 0 and Tomato 1 are imposters" applies to both IDs.
+    Return {pid: trimmed_snippet}.
 
-    Best-effort only: when the VLM departs from the requested format (e.g.
-    only one sentence with no IDs, or a different sentence boundary), the
-    affected IDs simply get an empty/default entry the caller can replace.
+    Parsing is best-effort only.
+    The VLM may use one sentence without IDs or different sentence boundaries.
+    In these cases, affected IDs receive empty or default entries.
+    The caller can replace those entries.
     """
     import re
 
-    # Sentence-ish split. Newlines and ". " count as boundaries; we trim
-    # leading/trailing whitespace and skip empty fragments.
+    # Split at newlines and ". " as approximate sentence boundaries
+    # Remove leading and trailing whitespace
+    # Skip empty fragments
     chunks = [
         c.strip()
         for c in re.split(r"(?<=[.!?])\s+|\n+", text)
@@ -229,17 +233,16 @@ def _extract_per_id_reasoning(text: str) -> Dict[int, str]:
             pid = int(match.group(1))
             result.setdefault(pid, []).append(chunk)
 
-    # Collapse list of sentences per pid into a single short string.
+    # Collapse list of sentences per pid into a single short string
     return {pid: " ".join(snippets) for pid, snippets in result.items()}
 
 
 def _parse_vlm_verdict(text: str) -> Tuple[str, str, str]:
     """Extract a verdict label + colors from a VLM reasoning string.
 
-    The detector-side prompt requests a `VERDICT: READY|NOT_READY|UNCERTAIN`
-    line, but we also degrade gracefully on legacy "YES./NO." style responses
-    and on free-form text. Returns (label, fg_color, bg_color) ready for
-    direct QLabel styling.
+    The detector prompt requests a `VERDICT: READY|NOT_READY|UNCERTAIN` line.
+    Also handle legacy "YES./NO." responses and free-form text.
+    Return (label, fg_color, bg_color) for direct QLabel styling.
     """
     upper = text.upper()
     if "READY" in upper and "NOT_READY" not in upper and "NOT READY" not in upper:
@@ -248,7 +251,7 @@ def _parse_vlm_verdict(text: str) -> Tuple[str, str, str]:
         return "✗  NOT READY", _QT_RED, "#2a0d0d"
     if "UNCERTAIN" in upper:
         return "?  UNCERTAIN", _QT_AMBER, "#261a0d"
-    # Legacy compatibility: "YES." / "NO." at the start of the response.
+    # Legacy compatibility: "YES." / "NO." at the start of the response
     head = upper.strip().split(".", 1)[0].strip()
     if head == "YES":
         return "✓  READY TO PICK", _QT_GREEN, "#0d2218"
@@ -287,7 +290,7 @@ def _dark_palette() -> QPalette:
     return p
 
 
-# ─── ROS 2 node ────────────────────────────────────────────────────────────────
+# ROS 2 node
 
 class AgroVizNode(Node):
     """Aggregates all pipeline topics into thread-safe state.
@@ -301,7 +304,7 @@ class AgroVizNode(Node):
         self._bridge = CvBridge()
         self._lock   = threading.Lock()
 
-        # ── Camera frames ────────────────────────────────────────────────────
+        # Camera frames
         self._debug_frame: Optional[np.ndarray] = None
         self._raw_frame:   Optional[np.ndarray] = None
         self._debug_ts:    float = 0.0
@@ -310,44 +313,41 @@ class AgroVizNode(Node):
         # Cached once — RealSense intrinsics are static per session
         self._cam_info: Optional[dict] = None
 
-        # ── Detection / track state ───────────────────────────────────────────
+        # Detection / track state
         self._detections: List[dict] = []           # [{bbox, score, cx_518, cy_518}]
         self._tracks:     List[dict] = []           # latest tomato_tracks JSON array
         self._catalog:    Dict[int, dict] = {}      # persistent_id → enriched track dict
         self._picked_ids: set  = set()
         self._vlm_id:     Optional[int] = None      # persistent_id selected by VLM
-        # Per-track classification votes. Each cycle, the VLM parses the
-        # response and tells us which IDs it considers imposter vs real.
-        # We accumulate votes here and decide the catalog badge based on
-        # majority. This:
-        #   - smooths over single-call VLM mistakes (one flip won't change
-        #     the verdict if 4 prior calls agreed),
-        #   - decouples per-card verdict from the global -1 veto (a card
-        #     the VLM consistently calls real shows as ACTIVE even when the
-        #     global veto fires),
-        #   - and lets the demo viewer watch the verdict stabilise as
-        #     evidence accumulates.
+        # Accumulate classification votes for each track across VLM cycles
+        # Each cycle identifies real candidates and imposters by ID
+        # Use the majority to select the catalog badge
+        # Four agreeing calls protect the verdict against one conflicting call
+        # Keep each card's verdict independent of the global -1 veto
+        # A consistently real candidate remains ACTIVE during that global veto
+        # Viewers can see the verdict stabilize as evidence accumulates
         # Schema: {pid: {"imposter": int, "real": int}}
         self._vlm_votes: Dict[int, dict] = {}
-        # Decision threshold: a tag locks once it has at least this many
-        # MORE votes than the other side. Lower = more responsive, higher
-        # = more stable. 2 means "any 2-vote lead locks it" — empirically
-        # the right balance for ~10 s VLM cycle on the demo wall.
+        # Lock a tag when its vote lead reaches this threshold
+        # A lower threshold increases responsiveness
+        # A higher threshold increases stability
+        # A value of 2 locks any tag with a lead of 2 votes
+        # This balance worked with the ~10 s VLM cycle on the demo wall
         self._vlm_vote_margin: int = 2
         self._vlm_reason: str = ""
 
-        # ── Misc UI state ─────────────────────────────────────────────────────
+        # Misc UI state
         self._safe_to_pick: bool = False
         # Rolling history of the last few VLM responses for the dashboard
-        # bottom-right panel — newest first.
+        # bottom-right panel — newest first
         self._vlm_history: collections.deque = collections.deque(maxlen=4)
         self._vlm_history_gen: int = 0
         # Per-track VLM reasoning snippets. Populated by parsing "Tomato N"
         # mentions out of the response text — used by the clickable catalog
-        # cards to show what the VLM specifically said about each track.
+        # cards to show what the VLM specifically said about each track
         self._per_id_reasoning: Dict[int, str] = {}
 
-        # Panel 2: HTML log entries, newest first; generation counter avoids
+        # Panel 2: HTML log entries, newest first. generation counter avoids
         # a full string comparison on every tick
         self._log_entries: collections.deque = collections.deque(maxlen=MAX_LOG_ENTRIES)
         self._log_gen:     int = 0
@@ -366,7 +366,7 @@ class AgroVizNode(Node):
             "qwen_vl":  0.0,
         }
 
-        # ── Subscriptions ─────────────────────────────────────────────────────
+        # Subscriptions
         _r = rclpy.qos.QoSProfile(depth=10)    # reliable QoS for pipeline topics
 
         self.create_subscription(Image,            "/agrobot/debug_image",               self._cb_debug_img,   SENSOR_QOS)
@@ -385,7 +385,7 @@ class AgroVizNode(Node):
 
         self.get_logger().info(f"{_APP_TITLE} — node ready, 11 subscriptions active.")
 
-    # ── Image callbacks ───────────────────────────────────────────────────────
+    # Image callbacks
 
     def _cb_debug_img(self, msg: Image) -> None:
         frame = self._bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
@@ -411,7 +411,7 @@ class AgroVizNode(Node):
                     "w":  msg.width, "h": msg.height,
                 }
 
-    # ── Detection callback ────────────────────────────────────────────────────
+    # Detection callback
 
     def _cb_detections(self, msg: Detection2DArray) -> None:
         dets: List[dict] = []
@@ -431,13 +431,13 @@ class AgroVizNode(Node):
             self._detections = dets
             self._health["detector"] = time.monotonic()
 
-    # ── Spatial callback (health stamp only; tracks carry the full 3D data) ───
+    # Spatial callback (health stamp only. tracks carry the full 3D data)
 
     def _cb_spatial(self, msg: String) -> None:
         with self._lock:
             self._health["spatial"] = time.monotonic()
 
-    # ── Tracks callback ───────────────────────────────────────────────────────
+    # Tracks callback
 
     def _cb_tracks(self, msg: String) -> None:
         try:
@@ -465,8 +465,8 @@ class AgroVizNode(Node):
                     "_picked": pid in self._picked_ids,
                 }
 
-            # Tracks absent this frame are marked lost; timestamp the
-            # transition so panel 3 can auto-evict stale LOST cards.
+            # Mark tracks absent from this frame as lost
+            # Timestamp the transition so panel 3 can remove stale LOST cards
             for pid, entry in self._catalog.items():
                 if (pid not in active_ids
                         and not entry.get("_picked")
@@ -482,10 +482,10 @@ class AgroVizNode(Node):
                 if e.get("_lost") and not e.get("_picked")
             )
 
-            # Build Panel 2 HTML card for this batch.
+            # Build Panel 2 HTML card for this batch
             # We call them "candidates" (not "tomatoes") because the upstream
             # detector matches on round-fruit-like visual features and only
-            # Qwen-VL semantically confirms which are actually tomatoes.
+            # Qwen-VL semantically confirms which are actually tomatoes
             k      = len(tracks)
             id_str = [t["persistent_id"] for t in tracks]
             t_str  = ts.strftime("%H:%M:%S.") + f"{ts.microsecond // 1000:03d}"
@@ -515,11 +515,11 @@ class AgroVizNode(Node):
             self._log_entries.appendleft("<br>".join(lines))
             self._log_gen += 1
 
-    # ── VLM callbacks ─────────────────────────────────────────────────────────
+    # VLM callbacks
 
     def _cb_pick_target(self, msg: PoseStamped) -> None:
-        # pick_target fires only on an actual selection, not every frame;
-        # it's a coarse liveness signal, not a per-frame heartbeat
+        # pick_target signals an actual selection rather than every frame
+        # It provides a coarse indication of activity
         with self._lock:
             self._health["qwen_vl"] = time.monotonic()
 
@@ -539,13 +539,13 @@ class AgroVizNode(Node):
                 {"ts": ts_str, "text": msg.data, "pid": self._vlm_id}
             )
             self._vlm_history_gen += 1
-            # Store per-id reasoning snippets from multi-candidate responses.
+            # Store per-id reasoning snippets from multi-candidate responses
             for pid_key, snippet in per_id.items():
                 self._per_id_reasoning[pid_key] = snippet
             # Single-tomato path: response contains "VERDICT: NOT_TOMATO /
             # READY / NOT_READY" with no "Candidate N" — store the whole
             # text keyed to the currently-tracked pid so the popup can show
-            # it even though no candidate number appears in the text.
+            # it even though no candidate number appears in the text
             if not per_id and self._vlm_id is not None:
                 self._per_id_reasoning[self._vlm_id] = msg.data.strip()
 
@@ -566,20 +566,20 @@ class AgroVizNode(Node):
         new_reals     = _as_int_set(payload.get("real_tomatoes"))
 
         with self._lock:
-            # Accumulate votes. A pid mentioned as imposter and real in the
-            # same call (rare, but possible if the parser is ambiguous)
-            # gets a vote on each side; majority decides.
+            # Accumulate votes and use the majority
+            # A candidate named as both imposter and real receives one vote per side
+            # This is rare but possible when the parser is ambiguous
             for ipid in new_imposters:
                 self._vlm_votes.setdefault(ipid, {"imposter": 0, "real": 0})["imposter"] += 1
             for rpid in new_reals:
                 self._vlm_votes.setdefault(rpid, {"imposter": 0, "real": 0})["real"] += 1
-            # Selected pid also counts as a "real" vote — VLM picked it.
+            # Selected pid also counts as a "real" vote — VLM picked it
             if pid != -1:
                 self._vlm_votes.setdefault(pid, {"imposter": 0, "real": 0})["real"] += 1
                 # Only set the PICKING highlight when the current vote
                 # tally agrees the chosen ID is real (avoids the flip-flop
                 # the user saw before, where one bad pick would override
-                # multiple imposter calls).
+                # multiple imposter calls)
                 if self._verdict_for(pid) != "imposter":
                     self._vlm_id = pid
             self._health["qwen_vl"] = time.monotonic()
@@ -601,8 +601,9 @@ class AgroVizNode(Node):
           AND never called it an imposter).
         - "undecided" otherwise — show ACTIVE/CONVERGING state as normal.
 
-        This is asymmetric by design: we'd rather suppress a valid tomato
-        once than pick an apple once. Reset Catalog clears all votes.
+        The rule deliberately treats real and imposter votes differently.
+        Suppressing one valid tomato is preferable to picking one apple.
+        Reset Catalog clears all votes.
         """
         votes = self._vlm_votes.get(pid)
         if not votes:
@@ -629,13 +630,14 @@ class AgroVizNode(Node):
                 self._catalog[pid]["_lost"]   = False
 
 
-# ─── Tomato card widget ────────────────────────────────────────────────────────
+# Tomato card widget
 
 class TomatoCard(QFrame):
     """One card in the Panel 3 catalog grid.
 
-    Widget instance is stable for the session; only content and border are
-    updated on each tick to avoid layout thrashing.
+    Keep the same widget instance throughout the session.
+    Update only its content and border on each tick.
+    This avoids repeated layout changes.
 
     Emits `clicked(int)` carrying the persistent_id whenever the user
     left-clicks the card. MainWindow handles the click to open a per-track
@@ -660,7 +662,7 @@ class TomatoCard(QFrame):
         self.setFixedSize(CARD_W, CARD_H)
         self.setFrameShape(QFrame.Box)
         # Visual affordance: pointer cursor so the user knows the card is
-        # interactive even before they discover the popup.
+        # interactive even before they discover the popup
         self.setCursor(Qt.PointingHandCursor)
 
         layout = QVBoxLayout(self)
@@ -713,10 +715,10 @@ class TomatoCard(QFrame):
 
         raw = _decode_b64_jpeg(entry.get("clipped_image"))
         src = raw if raw is not None else _placeholder_img()
-        # Fit the source crop into the card thumbnail without squashing.
-        # Scale-to-fill + centre-crop keeps the tomato round; if the source
-        # is portrait-ish (typical for hanging fruit) the bottom/sides get
-        # gently cropped rather than horizontally distorted.
+        # Scale the source crop to fill the thumbnail without changing its shape
+        # Crop the image around its center to keep the tomato round
+        # Portrait images are typical for hanging fruit
+        # Crop their bottom or sides instead of distorting them horizontally
         sh, sw = src.shape[:2]
         scale = max(CARD_IMAGE_W / sw, CARD_IMAGE_H / sh)
         new_w, new_h = max(1, int(sw * scale)), max(1, int(sh * scale))
@@ -731,7 +733,7 @@ class TomatoCard(QFrame):
 
         # PICKED takes priority over everything (terminal state). NOT_TOMATO
         # outranks PICKING/ACTIVE/CONVERGING so a vetoed track is visibly
-        # disqualified even if it's still being detected each cycle.
+        # disqualified even if it's still being detected each cycle
         if picked:
             self.status = "PICKED"
             txt, fg, bg, border = "✓ PICKED",    _QT_RED,   "#2a0d0d", _QT_RED
@@ -763,7 +765,7 @@ class TomatoCard(QFrame):
         return self._STATUS_ORDER.get(self.status, 9)
 
 
-# ─── Main window ───────────────────────────────────────────────────────────────
+# Main window
 
 class MainWindow(QMainWindow):
 
@@ -771,13 +773,13 @@ class MainWindow(QMainWindow):
         super().__init__()
         self._node     = node
         self._cards:   Dict[int, TomatoCard] = {}
-        self._sort_order: List[int] = []     # last rendered sort order for Panel 3
+        self._sort_order: List[int] = []     # Last rendered sort order for Panel 3
         self._last_log_gen: int = -1         # last log generation rendered in Panel 2
         self._last_vlm_history_gen: int = -1  # last VLM history gen rendered in Panel 4
-        # Click-popup state for the catalog cards. One popup is reused; the
-        # currently-shown pid sits in _popup_pid so the next click on the
-        # SAME card hides it (toggle), and a click on a DIFFERENT card
-        # re-targets the popup without closing/reopening.
+        # Reuse one popup for catalog cards
+        # Store the displayed candidate in _popup_pid
+        # A second click on the SAME card hides the popup
+        # A click on a DIFFERENT card changes its content without reopening it
         self._popup: Optional[QFrame] = None
         self._popup_pid: Optional[int] = None
 
@@ -788,7 +790,7 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._start_timers()
 
-    # ── Theme ─────────────────────────────────────────────────────────────────
+    # Theme
 
     def _setup_theme(self) -> None:
         QApplication.setStyle("Fusion")
@@ -807,7 +809,7 @@ class MainWindow(QMainWindow):
             QScrollBar::sub-line:vertical { height:0; }
         """)
 
-    # ── Menu ──────────────────────────────────────────────────────────────────
+    # Menu
 
     def _build_menu(self) -> None:
         mb = self.menuBar()
@@ -825,14 +827,13 @@ class MainWindow(QMainWindow):
         a_topics.triggered.connect(self._show_topics)
         help_m.addAction(a_topics)
 
-    # ── Layout ────────────────────────────────────────────────────────────────
+    # Layout
 
     def _build_ui(self) -> None:
-        # Two side-by-side vertical stacks instead of a 2×2 grid. This lets
-        # the LEFT column have its own vertical split (camera bigger, catalog
-        # smaller) while the RIGHT column keeps its own independent ratio
-        # (event stream / metrics) — QGridLayout's row stretch is shared
-        # across columns, so it can't model asymmetric splits.
+        # Use two vertical stacks beside each other instead of a 2×2 grid
+        # Give the LEFT column a larger camera panel and smaller catalog panel
+        # Keep the RIGHT column's event-stream and metrics ratio independent
+        # QGridLayout shares row stretch across columns and cannot express this
         root = QWidget()
         self.setCentralWidget(root)
         outer = QHBoxLayout(root)
@@ -842,18 +843,18 @@ class MainWindow(QMainWindow):
         left_col = QVBoxLayout()
         left_col.setSpacing(6)
         # 9:4 → camera ~69% of left-column height, catalog ~31%. Gives the
-        # catalog enough room for one row of cards without dominating.
+        # catalog enough room for one row of cards without dominating
         left_col.addWidget(self._panel1(), stretch=9)
         left_col.addWidget(self._panel3(), stretch=4)
 
         right_col = QVBoxLayout()
         right_col.setSpacing(6)
-        # Event stream and metrics keep an even split (unchanged from before).
+        # Event stream and metrics keep an even split (unchanged from before)
         right_col.addWidget(self._panel2(), stretch=3)
         right_col.addWidget(self._panel4(), stretch=2)
 
         # Left column wider than right so the 4:3 camera image lands closer
-        # to its native aspect ratio after letterboxing.
+        # to its native aspect ratio after letterboxing
         outer.addLayout(left_col, stretch=3)
         outer.addLayout(right_col, stretch=2)
 
@@ -977,7 +978,7 @@ class MainWindow(QMainWindow):
 
         v.addWidget(self._sep())
 
-        # ── VLM Live Reasoning ────────────────────────────────────────────
+        # VLM Live Reasoning
         vlm_header = QLabel("⚡  VLM LIVE REASONING")
         vlm_header.setFont(QFont("Monospace", 9, QFont.Bold))
         vlm_header.setStyleSheet(f"color:{_QT_CYAN};border:none;")
@@ -1010,7 +1011,7 @@ class MainWindow(QMainWindow):
         s.setStyleSheet("background:#3a3a3a;border:none;")
         return s
 
-    # ── Timers ────────────────────────────────────────────────────────────────
+    # Timers
 
     def _start_timers(self) -> None:
         for interval, slot in (
@@ -1023,7 +1024,7 @@ class MainWindow(QMainWindow):
             t.timeout.connect(slot)
             t.start(interval)
 
-    # ── Panel 1 ───────────────────────────────────────────────────────────────
+    # Panel 1
 
     def _tick_panel1(self) -> None:
         with self._node._lock:
@@ -1037,7 +1038,7 @@ class MainWindow(QMainWindow):
             safe    = self._node._safe_to_pick
             cam     = self._node._cam_info
             # Imposter IDs from vote history — these override yellow/green
-            # even when vlm_id points at them (VLM selected inconsistently).
+            # even when vlm_id points at them (VLM selected inconsistently)
             cam_imposters = {
                 p for p in self._node._vlm_votes
                 if self._node._verdict_for(p) == "imposter"
@@ -1045,9 +1046,9 @@ class MainWindow(QMainWindow):
 
         now = time.monotonic()
 
-        # Always prefer raw_frame — the debug_frame has boxes pre-drawn by the
-        # detector in 518×518 coordinates on a 640×480 canvas, which produces a
-        # second misaligned overlay when the dashboard draws its own boxes.
+        # Prefer raw_frame to avoid a second, misaligned box overlay
+        # The detector draws debug_frame boxes in 518×518 coordinates
+        # Its canvas is 640×480, and the dashboard draws its own boxes
         if r_frame is not None:
             frame = r_frame.copy()
         elif d_frame is not None:
@@ -1063,8 +1064,8 @@ class MainWindow(QMainWindow):
 
         def _match_det(det: dict) -> Optional[dict]:
             if cam is not None and tracks:
-                # Project each track's 3D centroid into native image coords;
-                # match the detection centre (unletterboxed) by pixel proximity
+                # Project each track's 3D centroid into native image coordinates
+                # Match the detection centre (unletterboxed) by pixel proximity
                 dx, dy = _unletterbox_pt(det["cx_518"], det["cy_518"], orig_w, orig_h)
                 best, d_min = None, float("inf")
                 for t in tracks:
@@ -1082,8 +1083,8 @@ class MainWindow(QMainWindow):
             key = min(by_conf, key=lambda k: abs(k - round(det["score"], 4)))
             return by_conf[key]
 
-        # Draw overlays at native resolution; resize once at the end.
-        # Track which persistent_ids were covered by a fresh detection box.
+        # Draw overlays at native resolution. resize once at the end
+        # Track which persistent_ids have a fresh detection box
         drawn_pids: set = set()
 
         for det in dets:
@@ -1119,7 +1120,7 @@ class MainWindow(QMainWindow):
             )
 
         # For active tracks not covered by a fresh detection, project the EMA-smoothed
-        # 3D centroid back to 2D and draw an estimated box (thin border, ~ suffix).
+        # 3D centroid back to 2D and draw an estimated box (thin border, ~ suffix)
         if cam is not None:
             for t in tracks:
                 pid = t["persistent_id"]
@@ -1143,7 +1144,7 @@ class MainWindow(QMainWindow):
                 cv2.rectangle(frame, (bx1, by1), (bx2, by2), color, 1)
                 # Thin border + ellipsis label communicates "tracker memory,
                 # detector is between cycles" — better UX than showing a stale
-                # numeric estimate the user might misread as a fresh measurement.
+                # numeric estimate the user might misread as a fresh measurement
                 elabel = f"#{pid} \u00b7 processing..."
                 (tw, th), _ = cv2.getTextSize(elabel, cv2.FONT_HERSHEY_SIMPLEX, 0.4, 1)
                 cv2.rectangle(frame, (bx1, by1 - th - 4), (bx1 + tw + 4, by1), color, cv2.FILLED)
@@ -1154,12 +1155,10 @@ class MainWindow(QMainWindow):
 
         lw, lh = self._cam_lbl.width(), self._cam_lbl.height()
         if lw > 10 and lh > 10:
-            # Scale-to-fill with centre crop: preserves native aspect (no
-            # tomato squashing) AND fills the label edge-to-edge (no dark
-            # bars). The tradeoff is a thin strip at the edges may be
-            # cropped when the panel aspect differs from the camera aspect.
-            # For a tomato-picking demo the subjects sit near the centre,
-            # so the crop is invisible.
+            # Scale and crop around the center to preserve the image aspect ratio
+            # Fill the label to its edges without dark bars or distorted tomatoes
+            # Different panel and camera aspect ratios may require a thin edge crop
+            # Demo tomatoes are near the center, so this crop is invisible
             fh, fw = frame.shape[:2]
             scale = max(lw / fw, lh / fh)
             new_w, new_h = max(1, int(fw * scale)), max(1, int(fh * scale))
@@ -1180,7 +1179,7 @@ class MainWindow(QMainWindow):
                 f"border:none;background:#2a0d0d;color:{_QT_RED};border-radius:4px;"
             )
 
-    # ── Panel 2 ───────────────────────────────────────────────────────────────
+    # Panel 2
 
     def _tick_panel2(self) -> None:
         with self._node._lock:
@@ -1198,10 +1197,10 @@ class MainWindow(QMainWindow):
             f'<div style="font-family:monospace;font-size:9pt;line-height:1.5;">'
             f"{body}</div>"
         )
-        # Newest entry is at top; keep scroll there
+        # Newest entry is at top. Keep scroll there
         self._event_log.verticalScrollBar().setValue(0)
 
-    # ── Panel 3 ───────────────────────────────────────────────────────────────
+    # Panel 3
 
     def _tick_panel3(self) -> None:
         with self._node._lock:
@@ -1209,15 +1208,14 @@ class MainWindow(QMainWindow):
             picked  = set(self._node._picked_ids)
             vlm_id  = self._node._vlm_id
             # Vote-based per-ID verdict — see AgroVizNode._vlm_votes /
-            # _verdict_for. imposters = IDs currently leaning NOT_TOMATO.
+            # _verdict_for. imposters = IDs currently leaning NOT_TOMATO
             imposters = {
                 pid for pid in self._node._vlm_votes
                 if self._node._verdict_for(pid) == "imposter"
             }
 
-        # Auto-evict LOST cards that have aged past LOST_CARD_TTL_S so the
-        # catalog stays current during demos. Picked cards are kept forever
-        # as session history.
+        # Remove LOST cards older than LOST_CARD_TTL_S to keep the catalog current
+        # Retain picked cards throughout the session as history
         now = time.monotonic()
         to_evict = [
             pid for pid, entry in catalog.items()
@@ -1238,13 +1236,13 @@ class MainWindow(QMainWindow):
                 card.clicked.connect(self._on_card_clicked)
                 self._cards[pid] = card
 
-        # Tear down widgets for evicted ids
+        # Destroy widgets for removed IDs
         for pid in to_evict:
             card = self._cards.pop(pid, None)
             if card is not None:
                 self._grid_l.removeWidget(card)
                 card.deleteLater()
-            # If the popup was inspecting an evicted card, close it.
+            # If the popup was inspecting an evicted card, close it
             if self._popup_pid == pid:
                 self._close_card_popup()
 
@@ -1266,7 +1264,7 @@ class MainWindow(QMainWindow):
                 row, col = divmod(i, CATALOG_COLS)
                 self._grid_l.addWidget(self._cards[pid], row, col)
 
-    # ── Panel 4 ───────────────────────────────────────────────────────────────
+    # Panel 4
 
     def _tick_panel4(self) -> None:
         with self._node._lock:
@@ -1321,7 +1319,7 @@ class MainWindow(QMainWindow):
                 color = _QT_RED
             dot.setStyleSheet(f"color:{color};border:none;")
 
-        # ── VLM verdict badge (parsed from latest response) ────────────────
+        # VLM verdict badge (parsed from latest response)
         if vlm_reason:
             label, fg, bg = _parse_vlm_verdict(vlm_reason)
             self._vlm_verdict_lbl.setText(label)
@@ -1334,7 +1332,7 @@ class MainWindow(QMainWindow):
                 "background:#252525;border:1px solid #3a3a3a;border-radius:4px;color:#888;"
             )
 
-        # ── VLM reasoning history — rebuild only when contents changed ─────
+        # VLM reasoning history — rebuild only when contents changed
         if vlm_history_gen != self._last_vlm_history_gen:
             self._last_vlm_history_gen = vlm_history_gen
             import re as _re
@@ -1343,12 +1341,12 @@ class MainWindow(QMainWindow):
             for entry in vlm_history:
                 raw = entry["text"].strip()
 
-                # Only show entries that are per-ID structured responses.
-                # This filters out long free-form narratives ("Tomato 0 is
+                # Only show entries that are per-ID structured responses
+                # This removes long free-form narratives ("Tomato 0 is
                 # likely a tomato due to its red color and shape, but it
                 # could also be mistaken...") that are inaccurate and
                 # confusing. Structured responses have at least one
-                # "Candidate #N" or "VERDICT:" tag. Skip everything else.
+                # "Candidate #N" or "VERDICT:" tag. Skip everything else
                 is_structured = (
                     len(_id_pat.findall(raw)) >= 1
                     or "VERDICT:" in raw.upper()
@@ -1359,7 +1357,7 @@ class MainWindow(QMainWindow):
                 pid_str = f"#{entry['pid']}" if entry["pid"] is not None else "—"
                 text = raw.replace("\n", "  ").strip()
 
-                # Highlight structural tags.
+                # Highlight structural tags
                 for tag, color in (
                     ("RIPENESS:", _QT_AMBER),
                     ("PICK PATH:", _QT_CYAN),
@@ -1387,7 +1385,7 @@ class MainWindow(QMainWindow):
                 )
             self._vlm_reasoning_area.verticalScrollBar().setValue(0)
 
-    # ── Menu actions ──────────────────────────────────────────────────────────
+    # Menu actions
 
     def _reset_catalog(self) -> None:
         with self._node._lock:
@@ -1407,7 +1405,7 @@ class MainWindow(QMainWindow):
         self._cards.clear()
         self._sort_order = []
         self._close_card_popup()
-        # Tell the tracker to wipe its registry and restart IDs from 0.
+        # Tell the tracker to wipe its registry and restart IDs from 0
         msg = String()
         msg.data = "reset"
         self._node._reset_pub.publish(msg)
@@ -1418,7 +1416,7 @@ class MainWindow(QMainWindow):
             self._node._log_gen += 1
         self._event_log.clear()
 
-    # ── Catalog card click → VLM reasoning popup ───────────────────────────
+    # Catalog card click → VLM reasoning popup
 
     def _on_card_clicked(self, pid: int) -> None:
         """Toggle a small popup showing the VLM's analysis of this track.
@@ -1439,7 +1437,7 @@ class MainWindow(QMainWindow):
                 if self._node._verdict_for(p) == "imposter"
             }
             vlm_id       = self._node._vlm_id
-            latest_text  = self._node._vlm_reason        # full latest VLM response
+            latest_text  = self._node._vlm_reason        # Full latest VLM response
             stored_text  = self._node._per_id_reasoning.get(pid, "")
             votes = self._node._vlm_votes.get(
                 pid, {"imposter": 0, "real": 0}
@@ -1447,7 +1445,7 @@ class MainWindow(QMainWindow):
 
         # Build the reasoning text for this specific pid, computed fresh at
         # click time so it always reflects the most recent VLM output rather
-        # than whatever was stored on an earlier cycle.
+        # than whatever was stored on an earlier cycle
         #
         # Priority:
         #   1. Live parse of the latest VLM response (most responsive).
@@ -1472,7 +1470,7 @@ class MainWindow(QMainWindow):
         conf = entry["confidence"]
         age = entry.get("age", 0)
 
-        # Status verdict matches the catalog card priority order.
+        # Status verdict matches the catalog card priority order
         if pid in picked:
             verdict, vfg, vbg = "✓ PICKED",      _QT_RED,   "#2a0d0d"
         elif pid in imposters:
@@ -1503,12 +1501,11 @@ class MainWindow(QMainWindow):
         )
         self._popup_reason_lbl.setText(reasoning_text)
 
-        # Position the popup in MainWindow-local coords so it stays inside
-        # the dashboard frame (important under VNC where free-floating Qt
-        # windows can land off-screen). Prefer to the RIGHT of the card,
-        # vertically aligned to its top. If the card sits near the right
-        # edge of the window, fall back to BELOW the card. Final clamp
-        # keeps the popup fully on-screen either way.
+        # Use MainWindow coordinates to keep the popup inside the dashboard
+        # Independent Qt windows can appear outside the screen under VNC
+        # Prefer the RIGHT of the card, aligned with its top
+        # Use the space BELOW the card when the right window edge is too close
+        # Clamp the final position to keep the entire popup visible
         card = self._cards.get(pid)
         if card is not None:
             self._popup.adjustSize()
@@ -1519,15 +1516,15 @@ class MainWindow(QMainWindow):
             top_right = card.mapTo(self, card.rect().topRight())
             bottom_left = card.mapTo(self, card.rect().bottomLeft())
 
-            # Try to the right of the card first.
+            # Try to the right of the card first
             x = top_right.x() + 6
             y = top_right.y()
             if x + pw + margin > ww:
-                # Not enough room on the right; place it below the card.
+                # Not enough room on the right. place it below the card
                 x = bottom_left.x()
                 y = bottom_left.y() + 6
                 # If the card is also near the bottom, lift the popup so it
-                # fits above the card instead.
+                # fits above the card instead
                 if y + ph + margin > wh:
                     y = max(margin, card.mapTo(self, card.rect().topLeft()).y() - ph - 6)
 
@@ -1542,17 +1539,17 @@ class MainWindow(QMainWindow):
     def _build_card_popup(self) -> QFrame:
         """Construct the reusable popup widget for catalog card details.
 
-        Child of MainWindow (not Qt.Tool window) so it renders reliably under
-        VNC/Xvfb. Stays inside the dashboard frame and can be positioned in
-        MainWindow-local coords. We raise() it on show to put it above the
-        catalog grid.
+        Make the popup a child of MainWindow for reliable rendering under VNC/Xvfb.
+        Do not use a Qt.Tool window.
+        Keep it inside the dashboard frame with MainWindow coordinates.
+        Call raise() when showing it to place it above the catalog grid.
         """
         popup = QFrame(self)
         popup.setFixedWidth(340)
         popup.setStyleSheet(
             "QFrame{background:#1c1c1c;border:1px solid #4a4a4a;border-radius:6px;}"
         )
-        # Hidden until first show; on top of sibling panels when visible.
+        # Hidden until first show. on top of sibling panels when visible
         popup.hide()
 
         outer = QVBoxLayout(popup)
@@ -1624,21 +1621,22 @@ class MainWindow(QMainWindow):
             "/agrobot/mark_picked              std_msgs/String (JSON {persistent_id: N})",
         ]))
 
-    # ── Shutdown ──────────────────────────────────────────────────────────────
+    # Shutdown
 
     def closeEvent(self, event) -> None:  # noqa: N802
         rclpy.shutdown()
         event.accept()
 
 
-# ─── Entry point ──────────────────────────────────────────────────────────────
+# Entry point
 
 def main() -> None:
     rclpy.init()
     node = AgroVizNode()
 
-    # rclpy.spin blocks; run it in a daemon thread so the Qt event loop owns
-    # the main thread (required by most platform GUI toolkits, including PyQt5)
+    # Run blocking rclpy.spin in a daemon thread
+    # Keep the Qt event loop on the main thread
+    # Most platform GUI toolkits, including PyQt5, require this arrangement
     spin_thread = threading.Thread(target=rclpy.spin, args=(node,), daemon=True)
     spin_thread.start()
 

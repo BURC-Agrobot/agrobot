@@ -4,8 +4,8 @@ build_query_embedding.py — Build a DINOv2 tomato query embedding from labeled 
 
 Replaces the hardcoded red/orange RGB prior in dino_sam2_detector.py with a
 mean patch embedding computed from actual tomato pixels in the Laboro Tomato
-training set. The resulting vector is saved to models/query_embedding.pt and
-loaded automatically by DINOv2SAM2Detector at startup.
+training set. Save the resulting vector to models/query_embedding.pt.
+DINOv2SAM2Detector loads this vector automatically at startup.
 
 Why this matters:
   The RGB prior fires on red/orange patches. Laboro Tomato has green and yellow
@@ -13,7 +13,7 @@ Why this matters:
   everything. A data-driven embedding encodes shape, texture, and context from
   real tomato images, not just colour.
 
-Usage (from repo root):
+Usage (from repository root):
   # [MAC] host (uses MPS)
   PYTHONPATH=perception python3 perception/tools/build_query_embedding.py \
     --train-images data/Laboro-Tomato/train/images \
@@ -96,9 +96,10 @@ def _boxes_to_patch_mask(
 ) -> np.ndarray:
     """Return a (37,37) boolean mask of DINOv2 patch grid cells that overlap any GT box.
 
-    The 518×518 input is letterboxed from (orig_h, orig_w). Each patch covers
-    14×14 pixels in the 518×518 space. We project GT boxes into that space and
-    mark all overlapping patch cells.
+    The 518×518 input uses a letterbox transform from (orig_h, orig_w).
+    Each patch covers 14×14 pixels in that space.
+    Project GT boxes into the same space.
+    Mark all overlapping patch cells.
     """
     scale = min(_DINO_INPUT_SIZE / orig_w, _DINO_INPUT_SIZE / orig_h)
     new_w = int(orig_w * scale)
@@ -130,10 +131,13 @@ def _boxes_to_patch_mask(
 def _kmeans_prototypes(patches: torch.Tensor, k: int, n_iter: int = 100) -> torch.Tensor:
     """Compute k L2-normalised prototype vectors from patch embeddings via k-means.
 
-    Using k-means rather than the global mean because the tomato appearance
-    distribution in Laboro is multi-modal: green unripe, yellow transitional,
-    red ripe, and occluded/partial each occupy distinct regions of DINOv2 space.
-    The global mean sits equidistant from all modes and represents none well.
+    Laboro tomato appearances occupy several regions of DINOv2 feature space:
+      - Green, unripe tomatoes.
+      - Yellow tomatoes during ripening.
+      - Red, ripe tomatoes.
+      - Occluded or partial tomatoes.
+    Use k-means to represent these separate modes.
+    The global mean is equally distant from all modes and represents none well.
 
     Returns: (k, D) float32 tensor, each row L2-normalised.
     """
@@ -149,7 +153,7 @@ def _kmeans_prototypes(patches: torch.Tensor, k: int, n_iter: int = 100) -> torc
     centroids = patches[idx].unsqueeze(0)  # (1, D)
     for _ in range(k - 1):
         # Distance of each patch to the nearest existing centroid
-        dists = 1.0 - (patches @ centroids.T)  # (N, c); cosine distance
+        dists = 1.0 - (patches @ centroids.T)  # (N, c). cosine distance
         min_dists = dists.min(dim=1).values     # (N,)
         min_dists = min_dists.clamp(min=0.0)
         probs = min_dists / min_dists.sum()
@@ -191,12 +195,12 @@ def _load_dino_with_lora(device: torch.device, lora_path: Optional[Path] = None)
         try:
             from perception.tools.finetune_dino_lora import inject_lora
         except ImportError:
-            # Fallback path when running from repo root
+            # Fallback path when running from repository root
             sys.path.insert(0, str(Path(__file__).resolve().parent))
             from finetune_dino_lora import inject_lora  # type: ignore[import]
 
-        # Default to rank=8, lora_blocks=4 matching the training defaults.
-        # If you trained with different values, pass them via CLI in the future.
+        # Default to rank=8, lora_blocks=4 matching the training defaults
+        # If you trained with different values, pass them via CLI in the future
         dino = inject_lora(dino, rank=8, lora_blocks=4)
         lora_state = torch.load(str(lora_path), map_location=device)
         missing, unexpected = dino.load_state_dict(lora_state, strict=False)

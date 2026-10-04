@@ -1,11 +1,11 @@
 """
 pointcloud_utils.py — 3D geometry utilities for tomato spatial localization.
 
-Purpose: Pure-function library for point-cloud clipping, RANSAC sphere fitting,
-         and color crop extraction. No ROS types — all I/O is numpy arrays or
-         Python scalars, making these trivially testable off-robot.
+This library provides pure functions for point-cloud clipping, RANSAC sphere
+fitting, and color crop extraction. Inputs and outputs use numpy arrays or
+Python scalars, without ROS types. Tests can run without the robot.
 
-Target environment: [NUCBOX] runtime; [MAC] for tests and offline analysis.
+Target environment: [NUCBOX] runtime. [MAC] for tests and offline analysis.
 Sprint: 4 — tomato_spatial_node (NODE 2 in the picking pipeline).
 
 Data flow (caller is TomatoSpatialNode):
@@ -29,7 +29,7 @@ from __future__ import annotations
 import numpy as np
 
 
-# ─── Clipping ─────────────────────────────────────────────────────────────────
+# Clipping
 
 def clip_points_to_bbox(
     points: np.ndarray,
@@ -71,7 +71,7 @@ def clip_points_to_bbox(
     X, Y, Z = points[:, 0], points[:, 1], points[:, 2]
     valid = Z > 0.0
 
-    # Avoid division by zero on invalid points by substituting Z=1 (result masked out).
+    # Avoid division by zero on invalid points by substituting Z=1 (result masked out)
     safe_Z = np.where(valid, Z, 1.0)
     u_orig = np.where(valid, X / safe_Z * fx + cx_cam, np.nan)
     v_orig = np.where(valid, Y / safe_Z * fy + cy_cam, np.nan)
@@ -92,7 +92,7 @@ def clip_points_to_bbox(
     return points[mask]
 
 
-# ─── Depth Pre-Filter ─────────────────────────────────────────────────────────
+# Depth Pre-Filter
 
 def filter_cluster_by_depth(
     points: np.ndarray,
@@ -100,13 +100,14 @@ def filter_cluster_by_depth(
 ) -> np.ndarray:
     """Remove background points from a bbox cluster before sphere fitting.
 
-    The tomato is always the nearest surface inside its detection bbox. Background
-    (wall, shelf, leaves behind the tomato) sits at a higher Z. We keep only points
-    within depth_window_m of the cluster's minimum Z — that window spans the full
-    visible arc of a tomato (diameter ≤ 15 cm) while cutting the background tail.
+    The tomato is always the nearest surface inside its detection bounding box.
+    Background surfaces, such as walls, shelves, and leaves, have a higher Z.
+    Keep only points within depth_window_m of the minimum Z in the cluster.
+    This window covers the full visible arc of a tomato with diameter ≤ 15 cm.
+    It removes the background points at greater depths.
 
-    This is more robust than percentile filtering because it is invariant to the
-    fraction of background points in the cluster.
+    Unlike percentile filtering, this method does not depend on the fraction
+    of background points in the cluster.
 
     Args:
         points:         (N, 3) float32 cluster, already clipped to bbox.
@@ -124,7 +125,7 @@ def filter_cluster_by_depth(
     return filtered if len(filtered) >= 4 else points
 
 
-# ─── Sphere Fitting ────────────────────────────────────────────────────────────
+# Sphere Fitting
 
 def fit_sphere_algebraic(points: np.ndarray) -> tuple[np.ndarray, float]:
     """Fit a sphere to 3D points using algebraic least squares.
@@ -168,14 +169,16 @@ def fit_sphere_ransac(
     min_inliers: int = 10,
     max_radius_m: float = 0.12,
 ) -> tuple[np.ndarray, float, np.ndarray]:
-    """RANSAC sphere fitting — robust to depth noise at cluster boundaries.
+    """Fit a sphere with RANSAC despite depth noise at cluster boundaries.
 
-    Random 4-point subsamples drive algebraic fits; inliers are points within
-    inlier_dist of the sphere surface. Final fit is refined on all consensus
-    inliers, which improves centre accuracy vs. the 4-point hypothesis alone.
+    Fit a sphere algebraically to random 4-point subsamples.
+    Inliers are points within inlier_dist of the sphere surface.
+    Refine the final fit with all consensus inliers.
+    This improves centre accuracy compared with the 4-point hypothesis alone.
 
-    Tomatoes are 2–12 cm radius; fits outside [0.005, max_radius_m] are
-    rejected as degenerate (e.g. three collinear points).
+    Tomatoes have radii of 2–12 cm.
+    Reject fits outside [0.005, max_radius_m] as degenerate.
+    Three collinear points are an example of a degenerate input.
 
     Args:
         points:        (N, 3) point cloud cluster, already clipped to bbox.
@@ -196,7 +199,7 @@ def fit_sphere_ransac(
             c, r = points.mean(axis=0).astype(np.float32), 0.03
         return c, r, points
 
-    rng = np.random.default_rng(42)  # fixed seed — deterministic run-to-run behaviour
+    rng = np.random.default_rng(42)  # Fixed seed — deterministic run-to-run behaviour
     best_center = points.mean(axis=0).astype(np.float32)
     best_radius = 0.03
     best_count = 0
@@ -225,9 +228,9 @@ def fit_sphere_ransac(
                 best_center, best_radius = c, r
 
     if best_count < min_inliers:
-        # Algebraic fallback: RANSAC never found a stable consensus.
+        # Algebraic fallback: RANSAC never found a stable consensus
         # The fallback fit is unconstrained — cap it so callers get a physically
-        # plausible radius even when the cluster contains background clutter.
+        # plausible radius even when the cluster contains background clutter
         try:
             best_center, best_radius = fit_sphere_algebraic(points)
         except (np.linalg.LinAlgError, ValueError):
@@ -239,7 +242,7 @@ def fit_sphere_ransac(
     return best_center, best_radius, points[best_mask]
 
 
-# ─── Extents ───────────────────────────────────────────────────────────────────
+# Extents
 
 def compute_extents(points: np.ndarray) -> tuple[float, float, float]:
     """Axis-aligned bounding box extents of a point cluster.
@@ -256,7 +259,7 @@ def compute_extents(points: np.ndarray) -> tuple[float, float, float]:
     )
 
 
-# ─── Color Crop ────────────────────────────────────────────────────────────────
+# Color Crop
 
 def crop_color_to_bbox(
     bgr: np.ndarray,
@@ -266,8 +269,8 @@ def crop_color_to_bbox(
 ) -> np.ndarray:
     """Crop the original color frame to the region corresponding to a 518×518 bbox.
 
-    Reverses the letterbox transform from preprocess_for_dino() so that the
-    crop is expressed in original camera resolution rather than model resolution.
+    Reverse the letterbox transform from preprocess_for_dino().
+    Express the crop at the original camera resolution instead of model resolution.
     This gives the arm planner and Qwen-VL a full-resolution JPEG of each tomato.
 
     Args:

@@ -139,7 +139,7 @@ private:
   // Return why a new goal cannot start, or nothing when it may start
   std::string rejection(const Motion::Goal & goal) const
   {
-    // Refuse new work once shutdown has closed the acceptance gate
+    // Refuse new work once shutdown closes the acceptance gate
     if (shutting_down_) {
       return "node is shutting down";
     }
@@ -161,7 +161,7 @@ private:
     if (!state_.apply(event)) {
       throw std::logic_error("Invalid motion state transition");
     }
-    // Record state changes so motion outcomes can be traced
+    // Record state changes to explain motion outcomes
     RCLCPP_INFO(get_logger(), "Motion state: %s", state_.name());
   }
 
@@ -178,7 +178,7 @@ private:
     Positions sample;
     // Reject malformed timestamps before constructing ROS time
     if (message.header.stamp.sec < 0 || message.header.stamp.nanosec >= 1000000000U) {
-      // Log throttled so a bad publisher is visible without flooding logs
+      // Limit warning frequency so a bad publisher does not flood the logs
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "Ignored joint feedback: malformed timestamp");
       feedback_valid_ = false;
       stationary_samples_ = 0;
@@ -191,7 +191,7 @@ private:
     if (age_s > std::chrono::duration<double>(feedback_timeout_ms).count() || age_s < -feedback_lead_s ||
       !read_positions(message, sample))
     {
-      // Log throttled so a bad publisher is visible without flooding logs
+      // Limit warning frequency so a bad publisher does not flood the logs
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000,
         "Ignored joint feedback: stale, future-stamped, or missing required joints");
       feedback_valid_ = false;
@@ -282,7 +282,7 @@ private:
         // Release the completed query and check the mock hardware identity
         hardware_request_.reset();
         hardware_ready_ = mock_hardware(*response.get());
-        // Report unsupported hardware before any trajectory is sent
+        // Report unsupported hardware before sending any trajectory
         if (!hardware_ready_) {
           stop(Motion::Result::UNAVAILABLE, "Requires one active FakeSystem using mock_components/GenericSystem");
         }
@@ -412,7 +412,7 @@ private:
           stop(Motion::Result::EXECUTION_FAILED, "Controller rejected the trajectory");
           return;
         }
-        // Cancel late acceptance if stopping has already begun
+        // Cancel late acceptance if stopping already started
         if (state_.get() == State::stopping || state_.get() == State::faulted) {
           cancel_child();
           return;
@@ -491,7 +491,7 @@ private:
     if (state_.get() == State::faulted || state_.get() == State::idle) {return;}
     // Keep an ongoing stop within its original confirmation deadline
     if (state_.get() == State::stopping) {
-      // Let accepted cancellation replace an outcome still being settled
+      // Let accepted cancellation replace an outcome that remains pending
       if (code == Motion::Result::CANCELED) {
         // Save the reason that initiated this stop
         result_code_ = code;
@@ -694,7 +694,7 @@ int main(int argc, char ** argv)
     // Serialize callbacks so motion ownership needs no shared-data locks
     rclcpp::executors::SingleThreadedExecutor executor;
     executor.add_node(node);
-    // Remember whether signal-driven shutdown has already begun
+    // Track whether a signal already started shutdown
     bool stopping = false;
     // Keep processing ROS events while shutdown can still make progress
     while (rclcpp::ok()) {

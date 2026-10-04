@@ -1,11 +1,11 @@
 """
 image_utils.py — Image preprocessing utilities for the perception pipeline.
 
-This module is the single place where raw camera frames are conditioned before
-being passed to any ML model. Centralizing this here means:
-  - Sprint 2 (DINOv2/SAM2): just call `preprocess_for_dino()` — no boilerplate.
-  - Sprint 3 (AMD edge): we can swap the backend (OpenCV → ROCm-accelerated) here
-    without touching any node code.
+This module prepares raw camera frames for all machine-learning (ML) models.
+All models use this common preprocessing location:
+  - Sprint 2 (DINOv2/SAM2): call `preprocess_for_dino()` without repeated setup code.
+  - Sprint 3 (AMD edge): we can replace OpenCV with ROCm acceleration here.
+    This change does not require changes to node code.
 """
 
 from __future__ import annotations
@@ -15,10 +15,10 @@ import cv2
 from typing import Tuple
 
 
-# ─── Type Aliases ─────────────────────────────────────────────────────────────
-# BGR image as produced by OpenCV and cv_bridge.
+# Type Aliases
+# BGR image as produced by OpenCV and cv_bridge
 BGRImage = np.ndarray
-# RGB image as required by PyTorch / most ML models.
+# RGB image as required by PyTorch / most ML models
 RGBImage = np.ndarray
 
 
@@ -58,7 +58,7 @@ def resize_with_aspect(
 
     resized = cv2.resize(image, (new_w, new_h), interpolation=interpolation)
 
-    # Create black canvas at target size and paste the resized image centered.
+    # Create black canvas at target size and paste the resized image centered
     canvas = np.zeros((target_h, target_w, image.shape[2]), dtype=image.dtype)
     pad_x = (target_w - new_w) // 2
     pad_y = (target_h - new_h) // 2
@@ -118,8 +118,8 @@ def draw_detection_overlay(
 ) -> BGRImage:
     """Draw bounding boxes and labels onto a BGR image for visualization.
 
-    Used by the debug publisher in TomatoDetectorNode to render detections
-    as a `/agrobot/debug_image` topic viewable in Foxglove or rqt_image_view.
+    The debug publisher in TomatoDetectorNode renders detections on
+    `/agrobot/debug_image`. Foxglove and rqt_image_view can display this topic.
 
     Args:
         image: BGR image to draw on (modified in place).
@@ -135,7 +135,7 @@ def draw_detection_overlay(
         x1, y1, x2, y2 = [int(v) for v in box]
         cv2.rectangle(image, (x1, y1), (x2, y2), color, thickness=2)
         text = f"{label}: {score:.2f}"
-        # Background rectangle for text readability.
+        # Background rectangle for text readability
         (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
         cv2.rectangle(image, (x1, y1 - th - 6), (x1 + tw, y1), color, -1)
         cv2.putText(

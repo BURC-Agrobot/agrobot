@@ -2,20 +2,23 @@
 sam2_semantic_detector.py — DINOv2-guided semantic point sampling + SAM2 per-point prediction.
 
 Why this replaces uniform AMG grid for E3:
-  SAM2 AMG places a regular NxN grid of points across the image — at pts=20
-  that is 400 prompts, of which ~388 land on background. The grid is semantically
-  blind: it cannot know which cells contain tomatoes before generating masks.
-  Result: superlinear compute growth with diminishing recall returns.
+  SAM2 AMG places a regular NxN grid of points across the image.
+  At pts=20, this gives 400 prompts, of which ~388 fall on the background.
+  The grid cannot identify tomato cells before it generates masks.
+  Computation grows faster than prompt count, with diminishing gains in recall.
 
   This detector inverts the order of operations:
     OLD (AMG): grid → masks → DINOv2 scores each mask
     NEW (Semantic): DINOv2 heatmap → top-K points → SAM2 predicts one mask per point
 
-  DINOv2 runs once per frame (same cost as before). The 37×37 cosine similarity
-  map to the query embedding acts as a free pre-filter. We sample prompt points
-  from the top-scoring patches (high tomato likelihood) and augment with a sparse
-  uniform grid for coverage. SAM2ImagePredictor then generates exactly K masks,
-  one per point, using multimask_output=True and selecting the highest predicted_iou.
+  DINOv2 runs once per frame, with the same cost as before.
+  Its 37×37 map of cosine similarity to the query embedding provides a filter
+  without additional inference.
+  Sample prompt points from patches with the highest scores (high tomato likelihood).
+  Add a sparse uniform grid for coverage.
+
+  SAM2ImagePredictor generates exactly K masks, one per point.
+  Set multimask_output=True. Select the mask with the highest predicted_iou.
 
   This gives:
     - Higher recall at the same or lower prompt budget (semantic bias vs uniform)
@@ -348,16 +351,16 @@ class SAM2SemanticDetector:
         if self._sam2_predictor is None or self._query_embedding is None or self._dino is None:
             return []
 
-        # ── Step 1: DINOv2 forward ────────────────────────────────────────────
+        # Step 1: DINOv2 forward
         tensor = torch.from_numpy(preprocessed_chw).unsqueeze(0).to(self._device)
         with torch.no_grad():
             features = self._dino.forward_features(tensor)
         patch_tokens = features["x_norm_patchtokens"].squeeze(0).float()  # (1369, 768)
         patch_norms  = F.normalize(patch_tokens, dim=1)                    # L2-normalised
 
-        # ── Step 2: DINOv2 heatmap → semantic prompt points ──────────────────
-        # Compute per-patch cosine similarity to the tomato query embedding.
-        # For multi-prototype, use the max similarity across prototypes.
+        # Step 2: DINOv2 heatmap → semantic prompt points
+        # Compute per-patch cosine similarity to the tomato query embedding
+        # For multi-prototype, use the max similarity across prototypes
         if self._query_embedding.dim() == 1:
             flat_sims = patch_norms @ self._query_embedding  # (1369,)
         else:
@@ -369,22 +372,22 @@ class SAM2SemanticDetector:
         if prompt_coords.shape[0] == 0:
             return []
 
-        # ── Step 3: Reconstruct uint8 RGB for SAM2 ───────────────────────────
+        # Step 3: Reconstruct uint8 RGB for SAM2
         rgb_float = preprocessed_chw * _IMAGENET_STD[:, None, None] + _IMAGENET_MEAN[:, None, None]
         rgb_uint8 = (np.clip(rgb_float, 0, 1) * 255).astype(np.uint8)
         rgb_hwc   = np.transpose(rgb_uint8, (1, 2, 0))
 
-        # ── Step 4: SAM2 image encoding (once per frame) ─────────────────────
+        # Step 4: SAM2 image encoding (once per frame)
         try:
             self._sam2_predictor.set_image(rgb_hwc)
         except Exception as exc:
             logger.warning("SAM2 set_image() failed: %s", exc)
             return []
 
-        # ── Step 5: Per-point mask prediction ────────────────────────────────
-        # SAM2ImagePredictor.predict() accepts (N, 2) coords and (N,) labels.
-        # multimask_output=True returns 3 candidate masks per point; we pick the
-        # highest predicted_iou among the 3.
+        # Step 5: Per-point mask prediction
+        # SAM2ImagePredictor.predict() accepts (N, 2) coordinates and (N,) labels
+        # multimask_output=True returns 3 candidate masks per point. We pick the
+        # highest predicted_iou among the 3
         detections: list[dict] = []
 
         for i in range(prompt_coords.shape[0]):
@@ -399,7 +402,7 @@ class SAM2SemanticDetector:
                 logger.debug("SAM2 predict() failed at point %s: %s", pt, exc)
                 continue
 
-            # masks_np: (3, H, W) bool; scores_np: (3,) predicted_iou
+            # masks_np: (3, H, W) bool. scores_np: (3,) predicted_iou
             best_idx = int(np.argmax(scores_np))
             seg = masks_np[best_idx]   # (H, W) bool
             pred_iou = float(scores_np[best_idx])
@@ -407,7 +410,7 @@ class SAM2SemanticDetector:
             if seg.sum() < self._min_mask_area:
                 continue
 
-            # ── Step 6: DINOv2 scoring ────────────────────────────────────────
+            # Step 6: DINOv2 scoring
             tomato_sim, neg_sim = self._score_mask(seg, patch_norms)
             dino_sim = tomato_sim - self._negative_weight * neg_sim
 
@@ -432,7 +435,7 @@ class SAM2SemanticDetector:
                 "mask": seg.astype(np.uint8),
             })
 
-        # ── Step 7: NMS ───────────────────────────────────────────────────────
+        # Step 7: NMS
         if self._nms_iou_threshold > 0 and detections:
             detections = self._nms(detections)
 

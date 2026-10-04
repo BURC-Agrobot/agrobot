@@ -12,7 +12,7 @@ export AGROBOT_ROOT="${AGROBOT_ROOT:-/workspace}"
 # Source ROS 2 Jazzy environment
 source /opt/ros/jazzy/setup.bash
 
-# Add the local perception packages if the workspace has been built
+# Add the local perception packages if the workspace build exists
 if [ -f /ros2_ws/install/setup.bash ]; then
     source /ros2_ws/install/setup.bash
     echo "[agrobot] Sourced local ROS 2 workspace overlay."

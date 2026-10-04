@@ -3,10 +3,10 @@ qwen_vl_node.py — VLM-Guided Tomato Pick Selection (NODE 3)
 
 Architecture
 ------------
-NODE 3 in the Agrobot TOM v2 picking pipeline. Consumes persistent tomato tracks
-from /agrobot/tomato_tracks (NODE 2b output), shows each tomato's JPEG crop to
-Qwen2.5-VL-3B-Instruct, and selects which tomato the arm should pick based on
-ripeness, size, and accessibility reasoning.
+This is NODE 3 in the Agrobot TOM v2 picking pipeline.
+It receives persistent tomato tracks from /agrobot/tomato_tracks (NODE 2b output).
+It shows each tomato's JPEG crop to Qwen2.5-VL-3B-Instruct.
+It selects a tomato for the arm using ripeness, size, and accessibility reasoning.
 
 Why Qwen2.5-VL-3B over heuristics?
   The naive heuristic (pick closest / highest score) cannot distinguish a ripe
@@ -18,7 +18,7 @@ Why Qwen2.5-VL-3B over heuristics?
 Why not GPT-4V?
   API latency (1-5s + network) + no offline capability. Greenhouse rows often
   lack reliable internet. Local Qwen-VL runs in ~10-30s on CPU, acceptable
-  since the detector itself takes ~17s per frame.
+  since the detector itself takes ~17 s per frame.
 
 Inference model:
   Qwen/Qwen2.5-VL-3B-Instruct loaded in bfloat16 on CPU.
@@ -88,7 +88,7 @@ except ImportError:
     _PIL_OK = False
 
 # Qwen-VL imports — node starts without them but logs a warning and falls back
-# to heuristic (pick closest smoothed tomato).
+# to heuristic (pick closest smoothed tomato)
 try:
     import torch
     from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
@@ -98,7 +98,7 @@ except ImportError:
     _VLM_OK = False
 
 
-# ─── Prompt Templates ─────────────────────────────────────────────────────────
+# Prompt Templates
 
 _POLICY_PROMPTS = {
     "ripe_first": (
@@ -144,7 +144,7 @@ def _extract_per_id_verdicts(
 
     verdicts: dict[int, str] = {pid: "unknown" for pid in candidate_pids}
 
-    # --- New format: "Candidate #N: [type] | [reason]" ---
+    # New format: "Candidate #N: [type] | [reason]"
     # Parse lines matching "Candidate #N:" at the start
     structured_pattern = re.compile(
         r"(?i)candidate\s*#?\s*(\d+)\s*:\s*([^\n|]+)",
@@ -155,7 +155,7 @@ def _extract_per_id_verdicts(
         r"(?i)\b(ripe\s+tomato|tomato|cherry\s+tomato)\b"
     )
     # Keywords that indicate imposter in the type field
-    # Only reject clearly non-tomato shapes. Red/round objects are tomatoes.
+    # Only reject clearly non-tomato shapes. Red/round objects are tomatoes
     imposter_types = re.compile(
         r"(?i)\b(pear|pepper|green\s+apple|elongated|background|unknown\s+fruit)\b"
     )
@@ -171,13 +171,13 @@ def _extract_per_id_verdicts(
             verdicts[pid] = "real"
         elif imposter_types.search(type_text):
             verdicts[pid] = "imposter"
-        # else: leave as unknown
+        # Else: leave as unknown
 
     if found_structured:
         return verdicts
 
-    # --- Legacy narrative format ---
-    # Only reject clearly wrong shapes — NOT red round objects (those are tomatoes).
+    # Legacy narrative format
+    # Only reject clearly wrong shapes — NOT red round objects (those are tomatoes)
     imposter_keywords = (
         "a pear", "resembles a pear", "looks like a pear", "appears to be a pear",
         "a pepper", "green pepper", "resembles a pepper", "looks like a pepper",
@@ -255,7 +255,7 @@ class QwenVLNode(Node):
     def __init__(self) -> None:
         super().__init__("qwen_vl")
 
-        # ── Parameters ────────────────────────────────────────────────────────
+        # Parameters
         self.declare_parameter("model_path", "Qwen/Qwen2.5-VL-3B-Instruct")
         self.declare_parameter("pick_policy", "ripe_first")
         self.declare_parameter("min_smoothed_age", 3)
@@ -268,13 +268,13 @@ class QwenVLNode(Node):
         self._max_tokens: int = self.get_parameter("max_new_tokens").value
         tracks_topic: str = self.get_parameter("tracks_topic").value
 
-        # ── Model state ───────────────────────────────────────────────────────
+        # Model state
         self._model = None
         self._processor = None
         self._vlm_available = False
-        self._inference_running = False   # prevent callback re-entry during slow inference
+        self._inference_running = False   # Prevent callback re-entry during slow inference
 
-        # ── Publishers ────────────────────────────────────────────────────────
+        # Publishers
         self._pick_pub = self.create_publisher(
             PoseStamped, "/agrobot/pick_target", 10
         )
@@ -285,30 +285,30 @@ class QwenVLNode(Node):
             String, "/agrobot/vlm_selection", 10
         )
 
-        # ── Per-candidate locked verdicts (evaluate-once architecture) ───────────
-        # Each candidate is evaluated EXACTLY ONCE when it first converges.
-        # After the first VLM response that includes a candidate, the verdict
-        # is LOCKED permanently (until Reset Catalog) and no further VLM calls
-        # are made for that candidate.
+        # Per-candidate locked verdicts (evaluate-once architecture)
+        # Evaluate each candidate EXACTLY ONCE when it first converges
+        # Lock its verdict after the first VLM response that includes it
+        # Keep the verdict until Reset Catalog
+        # Do not call the VLM again for that candidate
         #
-        # "tomato"     → candidate confirmed ripe; always publish pick_target.
-        # "not_tomato" → candidate confirmed non-tomato; never publish pick_target.
-        # absent       → not yet evaluated; include in next VLM call.
+        # "tomato"     → candidate confirmed ripe. always publish pick_target
+        # "not_tomato" → candidate confirmed non-tomato. never publish pick_target
+        # Absent       → not yet evaluated. include in next VLM call
         #
-        # This eliminates flip-flop entirely: the model is called once per
-        # candidate, the verdict sticks, and the system converges in 1 cycle.
+        # Call the model once per candidate to prevent changes between verdicts
+        # Keep the verdict so the system converges in 1 cycle
         self._locked_verdicts: dict[int, str] = {}
         # Legacy vote dict retained for dashboard compatibility (it reads
-        # /agrobot/vlm_selection which carries imposters/real_tomatoes lists).
+        # /agrobot/vlm_selection which carries imposters/real_tomatoes lists)
         self._vlm_votes: dict[int, dict] = {}
         self.create_subscription(
             String, "/agrobot/reset_tracker", self._on_reset, 10
         )
 
-        # ── Subscription ──────────────────────────────────────────────────────
+        # Subscription
         self.create_subscription(String, tracks_topic, self._tracks_callback, 10)
 
-        # ── Load model in background thread so node starts immediately ────────
+        # Load model in background thread so node starts immediately
         if _VLM_OK and _PIL_OK:
             t = threading.Thread(target=self._load_model, daemon=True)
             t.start()
@@ -330,7 +330,7 @@ class QwenVLNode(Node):
             f"model='{self._model_path}'"
         )
 
-    # ── Model loading ──────────────────────────────────────────────────────────
+    # Model loading
 
     def _load_model(self) -> None:
         """Load Qwen2.5-VL in a background thread — ~30s first run from hub."""
@@ -339,24 +339,24 @@ class QwenVLNode(Node):
             "(this takes ~30s on first run; downloading ~6GB if not cached)..."
         )
         try:
-            # Check for local save first (avoids re-download after first run).
+            # Check for local save first (avoids re-download after first run)
             repo_root = Path(__file__).resolve().parent.parent.parent.parent
             local_path = repo_root / "models" / "qwen_vl"
             source = str(local_path) if local_path.exists() else self._model_path
 
             self._processor = AutoProcessor.from_pretrained(
                 source,
-                # Limit image resolution — crops are small (~100-200px).
-                # Default max_pixels is 12845056 (1280*28*28); we don't need that.
+                # Limit image resolution — crops are small (~100-200px)
+                # Default max_pixels is 12845056 (1280*28*28). We don't need that
                 min_pixels=224 * 224,
                 max_pixels=448 * 448,
             )
             self._model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
                 source,
-                # bfloat16 on CPU: 3B × 2 bytes ≈ 6GB RAM. Fits in 96GB NucBox.
+                # bfloat16 on CPU: 3B × 2 bytes ≈ 6GB RAM. Fits in 96GB NucBox
                 # No device_map — avoids the accelerate dependency. Without it,
                 # transformers loads to CPU by default when no GPU is visible
-                # (AGROBOT_FORCE_CPU=1 ensures HIP/CUDA are hidden).
+                # (AGROBOT_FORCE_CPU=1 ensures HIP/CUDA are hidden)
                 torch_dtype=torch.bfloat16,
             )
             self._model.eval()
@@ -370,7 +370,7 @@ class QwenVLNode(Node):
                 "Falling back to heuristic (closest smoothed tomato)."
             )
 
-    # ── Main callback ──────────────────────────────────────────────────────────
+    # Main callback
 
     def _tracks_callback(self, msg: String) -> None:
         """Called on each /agrobot/tomato_tracks message."""
@@ -386,7 +386,7 @@ class QwenVLNode(Node):
             self.get_logger().error(f"JSON parse error: {exc}")
             return
 
-        # Only act on tracks that have converged (EMA has enough observations).
+        # Act only on converged tracks with enough observations for the EMA
         candidates = [
             t for t in tracks
             if t.get("age", 0) >= self._min_age
@@ -399,7 +399,7 @@ class QwenVLNode(Node):
             )
             return
 
-        # Evaluate-once: only call VLM for candidates that don't have a verdict yet.
+        # Evaluate-once: only call VLM for candidates that don't have a verdict yet
         unevaluated = [
             t for t in candidates
             if t["persistent_id"] not in self._locked_verdicts
@@ -407,7 +407,7 @@ class QwenVLNode(Node):
 
         if not unevaluated:
             # All candidates already evaluated — re-publish the best without
-            # running VLM again. All locked candidates are tomatoes.
+            # running VLM again. All locked candidates are tomatoes
             self.get_logger().info(
                 f"All {len(candidates)} candidates already evaluated — "
                 "re-publishing best from locked verdicts."
@@ -433,7 +433,7 @@ class QwenVLNode(Node):
             finally:
                 self._inference_running = False
         else:
-            # Heuristic fallback: pick the closest (minimum z) smoothed tomato.
+            # Heuristic fallback: pick the closest (minimum z) smoothed tomato
             selected = min(candidates, key=lambda t: t["centroid"]["z"])
             self.get_logger().info(
                 f"Heuristic: selected persistent_id={selected['persistent_id']} "
@@ -443,9 +443,9 @@ class QwenVLNode(Node):
         if selected is not None:
             self._publish_selection(selected)
 
-    # ── VLM inference ─────────────────────────────────────────────────────────
+    # VLM inference
 
-    # ── Node-side imposter vote helpers ───────────────────────────────────────
+    # Node-side imposter vote helpers
 
     def _on_reset(self, msg) -> None:
         self._locked_verdicts.clear()
@@ -465,7 +465,7 @@ class QwenVLNode(Node):
         """True when the locked verdict for this candidate is not_tomato."""
         return self._locked_verdicts.get(pid) == "not_tomato"
 
-    # ─────────────────────────────────────────────────────────────────────────
+    #
 
     def _decode_jpeg(self, b64: str) -> "PILImage.Image | None":
         """Decode a base64 JPEG string to a PIL Image."""
@@ -509,8 +509,8 @@ class QwenVLNode(Node):
             reasoning_msg.data = response
             self._reasoning_pub.publish(reasoning_msg)
 
-            # Lock as tomato — the upstream pipeline already confirmed it.
-            # evaluate-once: won't re-run VLM for this pid until reset.
+            # Lock as tomato — the upstream pipeline already confirmed it
+            # evaluate-once: won't re-run VLM for this pid until reset
             self._locked_verdicts[pid] = "tomato"
             self._record_votes(imposters=[], reals=[pid])
 
@@ -522,7 +522,7 @@ class QwenVLNode(Node):
                 return None
             return t
 
-        # Multiple candidates — show all crops in one prompt.
+        # Multiple candidates — show all crops in one prompt
         n = len(candidates)
         content: list[dict] = [
             {
@@ -558,8 +558,8 @@ class QwenVLNode(Node):
         reasoning_msg.data = response
         self._reasoning_pub.publish(reasoning_msg)
 
-        # All candidates are confirmed tomatoes — lock them all.
-        # VLM only tells us which one to pick first.
+        # Lock every candidate because each has tomato confirmation
+        # VLM only tells us which one to pick first
         candidate_pids = [t["persistent_id"] for t in candidates]
         newly_locked: list[int] = []
         for pid in candidate_pids:
@@ -568,7 +568,7 @@ class QwenVLNode(Node):
                 newly_locked.append(pid)
         self._record_votes(imposters=[], reals=newly_locked)
 
-        # Use VLM's PICK: N selection; fall back to closest if unparseable.
+        # Use VLM's PICK: N selection. Use the closest candidate if parsing fails
         best = self._parse_selection(response, candidates)
         if best is None:
             best = min(candidates, key=lambda t: t["centroid"]["z"])
@@ -602,10 +602,10 @@ class QwenVLNode(Node):
             output_ids = self._model.generate(
                 **inputs,
                 max_new_tokens=self._max_tokens,
-                do_sample=False,     # greedy decoding — deterministic, faster
+                do_sample=False,     # Greedy decoding — deterministic, faster
             )
 
-        # Strip the input prompt tokens; keep only generated response.
+        # Strip the input prompt tokens. Keep only generated response
         generated = output_ids[:, inputs["input_ids"].shape[1]:]
         return self._processor.batch_decode(
             generated, skip_special_tokens=True, clean_up_tokenization_spaces=True
@@ -616,15 +616,16 @@ class QwenVLNode(Node):
     ) -> dict | None:
         """Extract the best candidate from the VLM response.
 
-        Looks for 'PICK: N' (last occurrence wins). Falls back to scanning
-        for any integer in the response. Returns None only if parsing
-        completely fails (caller falls back to closest).
+        Search for 'PICK: N'. Use its last occurrence.
+        If that fails, search for any integer in the response.
+        Return None only if parsing fails completely.
+        The caller then selects the closest candidate.
         """
         import re
 
         pid_set = {t["persistent_id"] for t in candidates}
 
-        # Primary: "PICK: N" — last match wins.
+        # Primary: "PICK: N" — last match wins
         pick_matches = re.findall(r"(?i)\bPICK\s*:\s*(\d+)", response)
         if pick_matches:
             pid = int(pick_matches[-1])
@@ -636,7 +637,7 @@ class QwenVLNode(Node):
             )
             return min(candidates, key=lambda t: t["centroid"]["z"])
 
-        # Fallback: last integer in the response that is a valid pid.
+        # Fallback: last integer in the response that is a valid pid
         nums = re.findall(r"\b(\d+)\b", response)
         for raw in reversed(nums):
             pid = int(raw)
@@ -649,7 +650,7 @@ class QwenVLNode(Node):
         )
         return None
 
-    # ── Publishing ─────────────────────────────────────────────────────────────
+    # Publishing
 
     def _publish_selection(self, tomato: dict) -> None:
         """Publish the selected tomato as a pick target for the arm planner."""
@@ -657,8 +658,8 @@ class QwenVLNode(Node):
         pid = tomato["persistent_id"]
         c = tomato["centroid"]
 
-        # PoseStamped: centroid in camera_color_optical_frame.
-        # Orientation is identity — arm planner determines approach angle from TF.
+        # PoseStamped: centroid in camera_color_optical_frame
+        # Orientation is identity — arm planner determines approach angle from TF
         pose_msg = PoseStamped()
         pose_msg.header = Header()
         pose_msg.header.stamp = now
@@ -672,10 +673,10 @@ class QwenVLNode(Node):
         pose_msg.pose.orientation.w = 1.0
         self._pick_pub.publish(pose_msg)
 
-        # Full selection record. Dashboard consumes this via /agrobot/vlm_selection.
-        # imposters and real_tomatoes carry the per-ID natural-language
+        # Full selection record. Dashboard consumes this via /agrobot/vlm_selection
+        # Imposters and real_tomatoes carry the per-ID natural-language
         # parse so the dashboard can render NOT_TOMATO / ACTIVE / PICKING
-        # per card instead of applying a global verdict.
+        # per card instead of applying a global verdict
         selection = {
             "persistent_id": pid,
             "centroid": tomato["centroid"],
@@ -701,12 +702,11 @@ class QwenVLNode(Node):
     ) -> None:
         """Broadcast a VLM veto so consumers can flag the non-tomato tracks.
 
-        Schema mirrors _publish_selection but with persistent_id=-1 to signal
-        "no pick this cycle". imposters holds IDs the VLM explicitly tagged
-        as non-tomatoes; real_tomatoes holds IDs it tagged as real even
-        though no pick was made (e.g. multi-tomato pass where VLM said
-        "Tomato 1 is a tomato" but voted -1 anyway). Dashboard uses both
-        to render per-card verdicts.
+        Use the _publish_selection schema with persistent_id=-1 for "no pick this cycle".
+        imposters contains IDs that the VLM explicitly marked as non-tomatoes.
+        real_tomatoes contains IDs that it marked as real despite making no pick.
+        For example, a multi-tomato pass may say "Tomato 1 is a tomato" but vote -1.
+        The dashboard uses both lists to render each card's verdict.
         """
         veto = {
             "persistent_id": -1,

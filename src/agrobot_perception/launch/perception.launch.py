@@ -13,10 +13,11 @@ Production config (P2.2 — current best, see REPRODUCE.md):
       depth_topic:=/camera/camera/depth/image_rect_raw \\
       depth_camera_info_topic:=/camera/camera/depth/camera_info
 
-Why a launch file vs `ros2 run`?
-- Starts multiple nodes in one command (detector + future spatial node + planner).
-- Centralized parameter configuration (no long --ros-args chains).
-- Handles node lifecycle, respawn policies, and namespace isolation cleanly.
+A launch file provides these functions beyond `ros2 run`:
+- It starts multiple nodes with one command: the detector, future spatial node,
+  and planner.
+- It configures parameters in one place without long --ros-args sequences.
+- It manages node lifecycle, restart policies, and namespace isolation.
 """
 
 from launch import LaunchDescription
@@ -26,7 +27,7 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description() -> LaunchDescription:
-    # ── Camera topics ──────────────────────────────────────────────────────────
+    # Camera topics
     camera_topic_arg = DeclareLaunchArgument(
         "camera_topic",
         default_value="/camera/camera/color/image_raw",
@@ -50,7 +51,7 @@ def generate_launch_description() -> LaunchDescription:
         ),
     )
 
-    # ── Detection thresholds ───────────────────────────────────────────────────
+    # Detection thresholds
     conf_threshold_arg = DeclareLaunchArgument(
         "confidence_threshold",
         default_value="0.0",
@@ -65,7 +66,7 @@ def generate_launch_description() -> LaunchDescription:
         description="IoU threshold for box NMS. P2.2 best: 0.40.",
     )
 
-    # ── SAM2 AMG parameters ────────────────────────────────────────────────────
+    # SAM2 AMG parameters
     amg_points_arg = DeclareLaunchArgument(
         "amg_points_per_side",
         default_value="48",
@@ -83,7 +84,7 @@ def generate_launch_description() -> LaunchDescription:
         description="Max tomatoes reported per frame. S4.12 best: 30.",
     )
 
-    # ── DINOv2 scoring parameters ──────────────────────────────────────────────
+    # DINOv2 scoring parameters
     dino_weight_arg = DeclareLaunchArgument(
         "dino_score_weight",
         default_value="0.7",
@@ -98,7 +99,7 @@ def generate_launch_description() -> LaunchDescription:
         description="λ for contrastive negative suppression. S4.12 best: 1.0.",
     )
 
-    # ── Embedding paths ────────────────────────────────────────────────────────
+    # Embedding paths
     query_emb_arg = DeclareLaunchArgument(
         "query_embedding_path",
         default_value="models/query_embedding_k4.pt",
@@ -118,7 +119,7 @@ def generate_launch_description() -> LaunchDescription:
         ),
     )
 
-    # ── SigLIP + Fusion MLP pipeline ──────────────────────────────────────────
+    # SigLIP + Fusion MLP pipeline
     siglip_enabled_arg = DeclareLaunchArgument(
         "siglip_enabled",
         default_value="true",
@@ -146,14 +147,14 @@ def generate_launch_description() -> LaunchDescription:
         ),
     )
 
-    # ── Debug ──────────────────────────────────────────────────────────────────
+    # Debug
     publish_debug_arg = DeclareLaunchArgument(
         "publish_debug_image",
         default_value="true",
         description="Publish annotated debug image on /agrobot/debug_image (Foxglove).",
     )
 
-    # ── Spatial node topics ────────────────────────────────────────────────────
+    # Spatial node topics
     pointcloud_topic_arg = DeclareLaunchArgument(
         "pointcloud_topic",
         default_value="/camera/camera/depth/color/points",
@@ -168,7 +169,7 @@ def generate_launch_description() -> LaunchDescription:
         description="CameraInfo for the color camera (used by tomato_spatial for intrinsics).",
     )
 
-    # ── Tomato Detector Node (Node 1) ──────────────────────────────────────────
+    # Tomato Detector Node (Node 1)
     tomato_detector_node = Node(
         package="agrobot_perception",
         executable="tomato_detector",
@@ -202,10 +203,10 @@ def generate_launch_description() -> LaunchDescription:
         ],
     )
 
-    # ── Tomato Spatial Node (Node 2) ───────────────────────────────────────────
-    # Consumes detections from Node 1 + PointCloud2 from the RealSense driver.
-    # Fits a sphere to each bbox cluster and publishes /agrobot/tomato_spatial.
-    # Enabled only when pointcloud_topic is non-empty (same pattern as depth 3D).
+    # Tomato Spatial Node (Node 2)
+    # Consumes detections from Node 1 + PointCloud2 from the RealSense driver
+    # Fits a sphere to each bbox cluster and publishes /agrobot/tomato_spatial
+    # Enabled only when pointcloud_topic is non-empty (same pattern as depth 3D)
     tomato_spatial_node = Node(
         package="agrobot_perception",
         executable="tomato_spatial",
@@ -223,7 +224,7 @@ def generate_launch_description() -> LaunchDescription:
         ],
     )
 
-    # ── Qwen-VL Pick Policy Args ───────────────────────────────────────────────
+    # Qwen-VL Pick Policy Args
     pick_policy_arg = DeclareLaunchArgument(
         "pick_policy",
         default_value="ripe_first",
@@ -243,10 +244,12 @@ def generate_launch_description() -> LaunchDescription:
         ),
     )
 
-    # ── Tomato Tracker Node (NODE 2b) ──────────────────────────────────────────
-    # Consumes /agrobot/tomato_spatial, assigns persistent IDs across frames,
-    # EMA-smooths centroids, and publishes /agrobot/tomato_tracks.
-    # Qwen-VL and the arm planner subscribe to tomato_tracks, not tomato_spatial.
+    # Tomato Tracker Node (NODE 2b)
+    # Read /agrobot/tomato_spatial
+    # Assign persistent IDs across frames
+    # Smooth centroids with an exponential moving average (EMA)
+    # Publish /agrobot/tomato_tracks for Qwen-VL and the arm planner
+    # These consumers subscribe to tomato_tracks, not tomato_spatial
     tomato_tracker_node = Node(
         package="agrobot_perception",
         executable="tomato_tracker",
@@ -258,21 +261,21 @@ def generate_launch_description() -> LaunchDescription:
                 "spatial_topic": "/agrobot/tomato_spatial",
                 "tracks_topic": "/agrobot/tomato_tracks",
                 "match_threshold_m": 0.08,
-                # 5 missed cycles ≈ 30 s at the ~6 s/frame detector cadence.
+                # 5 missed cycles ≈ 30 s at the ~6 s/frame detector cadence
                 # Sweet spot for demos: long enough to survive a brief miss
                 # (avoids ID-thrashing on a still tomato), short enough that a
                 # moved/removed tomato clears within half a minute and a new one
-                # can take the next persistent_id cleanly.
+                # can take the next persistent_id cleanly
                 "max_missed_frames": 5,
                 "smoothing_alpha": 0.4,
             }
         ],
     )
 
-    # ── Qwen-VL Node (NODE 3) ──────────────────────────────────────────────────
+    # Qwen-VL Node (NODE 3)
     # Subscribes to /agrobot/tomato_tracks. Loads Qwen2.5-VL-3B in a background
-    # thread (~30s). Until the model is ready it logs a warning and does nothing.
-    # Falls back to heuristic (closest tomato) if transformers is not installed.
+    # thread (~30s). Until the model is ready it logs a warning and does nothing
+    # Falls back to heuristic (closest tomato) if transformers is not installed
     qwen_vl_node = Node(
         package="agrobot_perception",
         executable="qwen_vl",

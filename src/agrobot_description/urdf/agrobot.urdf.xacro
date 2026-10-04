@@ -2,7 +2,7 @@
 
 <robot name="agrobot" xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-    <!-- SI units; STL coordinates are converted from millimetres by mesh scale. -->
+    <!-- Use SI units. The mesh scale converts STL coordinates from millimetres -->
     <material name="grey">
         <color rgba="0.5 0.5 0.5 1.0"/>
     </material>

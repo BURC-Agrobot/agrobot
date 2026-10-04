@@ -2,13 +2,15 @@
 fusion_mlp.py — Learned late-fusion head over per-detection features (Phase 2.2).
 
 Why learned fusion replaces fixed weights:
-  Phase 1.3 fuses dino_sim + siglip_sim + pred_iou with hand-picked weights
-  (0.4/0.4/0.2). Those weights are dataset-blind: they ignore the fact that on
-  Laboro Tomato, pred_iou correlates with IoU vs GT differently for green vs
-  ripe tomatoes (SAM2 is trained on web images, mostly red-ish objects). A
-  small MLP trained on train-set detections learns the right per-feature
-  weighting AND captures non-linear interactions (e.g. "pred_iou matters more
-  when the box is small").
+  Phase 1.3 combines dino_sim, siglip_sim, and pred_iou with manually selected
+  weights (0.4/0.4/0.2). These weights do not account for dataset differences.
+  On Laboro Tomato, pred_iou correlates with ground-truth (GT) IoU differently
+  for green and ripe tomatoes. SAM2 training uses web images with mostly
+  reddish objects.
+
+  A small multilayer perceptron (MLP) learns weights from training detections.
+  It also learns nonlinear interactions between features.
+  For example, pred_iou matters more when the box is small.
 
 What features the MLP sees:
   1. dino_sim       — DINOv2 contrastive score (already includes negative term)
@@ -19,9 +21,10 @@ What features the MLP sees:
   6. color_mean_h   — mean OpenCV Hue (0-180) inside bbox. Tomato hues cluster.
   7. color_sat_mean — mean Saturation. Distinguishes tomatoes from grey background.
 
-  These 7 features are cheap to compute and cover orthogonal failure modes
-  (semantic identity, mask shape, geometry, color) so the MLP can learn
-  correlations the fixed-weight fusion cannot express.
+  These 7 features take little computation.
+  They cover separate failure modes: semantic identity, mask shape, geometry,
+  and color. The MLP can therefore learn correlations that fixed weights
+  cannot express.
 
 Usage flow (Phase 2.2):
   1. Dump train-set features:
@@ -91,8 +94,8 @@ def extract_features(det: dict, rgb_hwc: np.ndarray) -> np.ndarray:
     """Compute the 7-dim feature vector for a single detection.
 
     Detection must carry `dino_sim`, `siglip_sim`, `pred_iou`, `mask`, `box`.
-    Geometry features are robust to mask noise (uses cv2.findContours on the
-    largest connected component).
+    Geometry features tolerate mask noise.
+    They use cv2.findContours on the largest connected component.
     """
     dino_sim = float(det.get("dino_sim", det.get("score", 0.0)))
     siglip_sim = float(det.get("siglip_sim", 0.0))
@@ -108,14 +111,14 @@ def extract_features(det: dict, rgb_hwc: np.ndarray) -> np.ndarray:
         mask_area_norm = area / (_INPUT_SIZE * _INPUT_SIZE)
         contours, _ = cv2.findContours(mask_u8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if contours:
-            # Largest contour = main object; ignores noise speckles.
+            # Largest contour = main object. ignores noise speckles
             cnt = max(contours, key=cv2.contourArea)
             perim = float(cv2.arcLength(cnt, True))
             circularity = (4.0 * np.pi * area / (perim * perim)) if perim > 0 else 0.0
         else:
             circularity = 0.0
 
-    # HSV color stats inside the bbox.
+    # HSV color stats inside the bbox
     x1, y1, x2, y2 = (int(round(v)) for v in det["box"])
     x1 = max(0, x1); y1 = max(0, y1)
     x2 = min(rgb_hwc.shape[1], x2); y2 = min(rgb_hwc.shape[0], y2)
@@ -131,15 +134,15 @@ def extract_features(det: dict, rgb_hwc: np.ndarray) -> np.ndarray:
     return np.array([
         dino_sim, siglip_sim, pred_iou,
         mask_area_norm, circularity,
-        color_mean_h / 180.0, color_sat_mean,  # both in [0, 1]
+        color_mean_h / 180.0, color_sat_mean,  # Both in [0, 1]
     ], dtype=np.float32)
 
 
 class FusionMLP(nn.Module):
-    """Tiny MLP: 7 -> 32 -> 16 -> 1. Output is a logit; sigmoid for probability.
+    """Tiny MLP: 7 -> 32 -> 16 -> 1. Output is a logit. sigmoid for probability.
 
-    Small enough to train on CPU in seconds even with 100k examples; small
-    enough at inference that latency overhead vs fixed-weight fusion is zero.
+    CPU training takes seconds even with 100k examples.
+    Inference adds zero latency compared with fusion that uses fixed weights.
     """
 
     def __init__(self, in_dim: int = N_FEATURES) -> None:
@@ -195,7 +198,7 @@ class FusionMLPWrapper:
         self._mlp = FusionMLP().to(self._device).eval()
         ckpt = torch.load(mlp_path, map_location=self._device)
         # train_fusion_mlp.py saves {"model": state_dict, "feature_mean": [...],
-        # "feature_std": [...]}. Older variant saved a bare state_dict; support both.
+        # "feature_std": [...]}. Older variant saved a bare state_dict. support both
         if isinstance(ckpt, dict) and "model" in ckpt:
             self._mlp.load_state_dict(ckpt["model"])
             self._feature_mean = np.asarray(ckpt.get("feature_mean", [0.0] * N_FEATURES),
@@ -215,7 +218,7 @@ class FusionMLPWrapper:
         rgb_hwc = reconstruct_rgb(preprocessed_chw)
         feats = np.stack([extract_features(d, rgb_hwc) for d in dets])
         # Apply the same standardization the trainer used. Skipping it leaves
-        # the MLP scoring on a different distribution from training -> garbage.
+        # the MLP scoring on a different distribution from training -> garbage
         feats_norm = (feats - self._feature_mean) / self._feature_std
         probs = self._mlp.score(feats_norm)  # (N,) probabilities
 
@@ -227,7 +230,7 @@ class FusionMLPWrapper:
         if self._conf_threshold > 0:
             dets = [d for d in dets if d["score"] >= self._conf_threshold]
 
-        # Cheap NMS replay using the MLP-derived score order.
+        # Cheap NMS replay using the MLP-derived score order
         from eval.tta import _box_nms
         dets = _box_nms(dets, self._nms_iou)
         dets.sort(key=lambda d: d["score"], reverse=True)
@@ -249,7 +252,7 @@ class FeatureDumpWrapper:
         self._base = base
         self._output_path = Path(output_path)
         self._output_path.parent.mkdir(parents=True, exist_ok=True)
-        # Truncate at start so re-runs do not append.
+        # Truncate at start so re-runs do not append
         self._output_path.write_text("")
         self._idx = 0
 

@@ -2,11 +2,12 @@
 metrics_coco.py — COCO-style detection metrics for paper-grade reporting.
 
 Why this exists:
-  perception/eval/metrics.py reports mAP@0.5 only — useful for sprint tracking
-  but insufficient for any peer-reviewed publication. Detection venues require
-  COCO mAP averaged over 10 IoU thresholds (0.50:0.05:0.95) plus per-area AP
-  (AP_S, AP_M, AP_L) so reviewers can see whether gains come from easy large
-  objects or hard small ones. This module computes all of those in one pass.
+  perception/eval/metrics.py reports only mAP@0.5.
+  This supports sprint tracking but is insufficient for any peer-reviewed publication.
+  Detection publications require COCO mAP over 10 IoU thresholds (0.50:0.05:0.95).
+  They also require AP by area: AP_S, AP_M, and AP_L.
+  These metrics show gains for easier large objects and harder small objects.
+  This module computes all these metrics in one pass.
 
 Implementation notes:
   - Single-class only (the project is binary tomato-vs-not). For multi-class
@@ -28,7 +29,7 @@ from pathlib import Path
 
 import numpy as np
 
-# COCO standard IoU sweep and area thresholds.
+# COCO standard IoU sweep and area thresholds
 _IOU_THRESHOLDS = np.linspace(0.5, 0.95, 10)
 _AREA_SMALL_MAX = 32 * 32        # < 1024 px²
 _AREA_MEDIUM_MAX = 96 * 96       # < 9216 px²
@@ -101,7 +102,7 @@ def _ap_at_iou(
         for d in sorted_dets:
             if area_filter and _area_bucket(tuple(d["box"])) != area_filter:
                 # Skip detections outside the bucket — they should not appear
-                # in the in-bucket PR curve regardless of whether they match.
+                # in the in-bucket PR curve regardless of whether they match
                 continue
             all_scores.append(float(d["score"]))
             box = tuple(float(v) for v in d["box"])
@@ -138,7 +139,7 @@ def _ap_at_iou(
     recalls = tp_cum / num_gt_total
 
     # 101-point interpolation: at each interp recall, take max precision at
-    # any recall >= interp recall (COCO + PASCAL VOC convention).
+    # any recall >= interp recall (COCO + PASCAL VOC convention)
     ap = 0.0
     for r in _RECALL_INTERP:
         mask = recalls >= r

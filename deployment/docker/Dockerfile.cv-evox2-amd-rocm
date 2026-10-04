@@ -13,7 +13,7 @@ FROM rocm/pytorch:rocm7.2.1_ubuntu24.04_py3.12_pytorch_release_2.9.1@sha256:96a2
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# ── ROS 2 Jazzy ───────────────────────────────────────────────────────────────
+# ROS 2 Jazzy
 RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
         -o /usr/share/keyrings/ros-archive-keyring.gpg && \
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] \
@@ -30,12 +30,13 @@ RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
     git tmux htop vim \
     && rm -rf /var/lib/apt/lists/*
 
-# ── Perception Python deps ────────────────────────────────────────────────────
-# CRITICAL: the rocm/pytorch base image keeps its Python (and the verified-good
-# torch 2.9.1+rocm7.2.1) in a venv at /opt/venv — NOT system Python. Perception
-# deps MUST install into that same venv or the nodes cannot import torch.
-# (Verified 2026-05-22: the earlier `pip3 --break-system-packages` installed to
-# system Python and every perception node failed with ModuleNotFoundError.)
+# Perception Python deps
+# CRITICAL: rocm/pytorch uses a virtual environment at /opt/venv
+# It contains Python and the verified torch 2.9.1+rocm7.2.1
+# Install perception dependencies in this environment, not in system Python
+# Otherwise, the nodes cannot import torch
+# Checks on 2026-05-22 found that pip3 --break-system-packages used system Python
+# Every perception node then failed with ModuleNotFoundError
 #
 # Pin NumPy 1.x and compatible Python packages in one dependency list
 COPY deployment/docker/requirements.txt /opt/agrobot/requirements.txt
@@ -52,7 +53,7 @@ RUN SAM2_BUILD_CUDA=0 /opt/venv/bin/python -m pip install \
     --requirement /opt/agrobot/requirements.txt && \
     /opt/venv/bin/python -m pip check
 
-# ── Environment ───────────────────────────────────────────────────────────────
+# Environment
 WORKDIR /workspace
 RUN mkdir -p /ros2_ws/src
 
@@ -60,24 +61,26 @@ ENV ROS_DOMAIN_ID=0
 ENV ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET
 ENV PATH=/opt/venv/bin:/opt/rocm/bin:${PATH}
 
-# Make venv packages (torch, scipy, sam2, transformers, etc.) visible to the
-# system Python used by colcon entry point scripts (shebang #!/usr/bin/python3).
-# source /opt/ros/jazzy/setup.bash prepends its own site-packages, so ROS
-# packages take priority — this does not conflict with ros2 package resolution.
+# Expose virtual-environment packages to the system Python that colcon uses
+# These packages include torch, scipy, sam2, and transformers
+# The colcon entry scripts use the shebang #!/usr/bin/python3
+# source /opt/ros/jazzy/setup.bash places its site-packages first
+# ROS packages take priority without conflicting with ros2 package resolution
 ENV PYTHONPATH=/opt/venv/lib/python3.12/site-packages
 
-# HSA_OVERRIDE_GFX_VERSION: safety fallback — ROCm 7.2.1 auto-detects gfx1151
-# on kernel 6.17.0-1023-oem, but this guards against ISA misdetection if the
-# kernel or driver ever changes. Do NOT use 11.0.x — those target gfx1100
-# (discrete RDNA 3) and SIGBUS on gfx1151's unified memory controller.
+# HSA_OVERRIDE_GFX_VERSION protects against incorrect ISA detection
+# ROCm 7.2.1 detects gfx1151 automatically on kernel 6.17.0-1023-oem
+# This override protects against detection errors after kernel or driver changes
+# Do NOT use 11.0.x, which targets gfx1100 (discrete RDNA 3)
+# Those versions cause SIGBUS on the gfx1151 unified memory controller
 ENV HSA_OVERRIDE_GFX_VERSION=11.5.1
 
-# GPU_MAX_HW_QUEUES: 8 CU clusters on Strix Halo — maximises parallelism for
-# concurrent DINOv2 + SAM2 inference streams.
+# Strix Halo has 8 CU clusters
+# GPU_MAX_HW_QUEUES maximizes parallel DINOv2 and SAM2 inference
 ENV GPU_MAX_HW_QUEUES=8
 
-# HSA_ENABLE_SDMA=0: SDMA overhead is higher than CPU memcpy on unified memory
-# (no discrete VRAM). Forces ROCm to use CPU-side blit copies instead.
+# SDMA overhead exceeds CPU memcpy overhead on unified memory without VRAM
+# HSA_ENABLE_SDMA=0 forces ROCm to copy data through CPU blit operations
 ENV HSA_ENABLE_SDMA=0
 
 RUN echo "source /opt/ros/jazzy/setup.bash" >> /root/.bashrc
