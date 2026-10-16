@@ -1,0 +1,34 @@
+# Keep development resources separate from other Docker projects
+name: agrobot-dev
+services:
+  dev:
+    # Build natively for Apple Silicon without emulating x86
+    image: agrobot:jazzy-arm64-dev
+    platform: linux/arm64
+    build:
+      context: .
+      dockerfile: deployment/docker/Dockerfile.dev-arm64
+    # Keep a shell available without starting hardware or graphical tools
+    init: true
+    stdin_open: true
+    tty: true
+    command: ["bash"]
+    working_dir: /ros2_ws
+    # Limit ROS discovery to processes inside this development container
+    environment:
+      ROS_DOMAIN_ID: "42"
+      ROS_AUTOMATIC_DISCOVERY_RANGE: LOCALHOST
+      AGROBOT_ROOT: /workspace
+      PYTHONDONTWRITEBYTECODE: "1"
+    volumes:
+      # Share source edits while retaining Linux-only build artifacts in volumes
+      - .:/workspace
+      - ./src:/ros2_ws/src
+      - build:/ros2_ws/build
+      - install:/ros2_ws/install
+      - logs:/ros2_ws/log
+# Preserve build products and logs across container recreation
+volumes:
+  build:
+  install:
+  logs:
