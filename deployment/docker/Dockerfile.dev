@@ -1,0 +1,50 @@
+# Use the pinned Jazzy base on Ubuntu Noble for this development machine
+FROM ros:jazzy-ros-base-noble@sha256:066420e07f60aa18262f2479981def87ebcfcec42eefb0c0c57c4a46098348ca
+
+# Install build checks and headless runtime dependencies without GPU ML packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential clang-tidy mypy python3-pytest \
+    python3-colcon-common-extensions python3-numpy python3-opencv \
+    ros-jazzy-moveit-ros-move-group ros-jazzy-moveit-kinematics \
+    ros-jazzy-moveit-planners ros-jazzy-moveit-simple-controller-manager \
+    ros-jazzy-moveit-configs-utils ros-jazzy-controller-manager \
+    ros-jazzy-joint-state-broadcaster ros-jazzy-joint-trajectory-controller \
+    ros-jazzy-joint-state-publisher ros-jazzy-robot-state-publisher \
+    ros-jazzy-xacro ros-jazzy-cv-bridge ros-jazzy-image-transport \
+    ros-jazzy-vision-msgs ros-jazzy-sensor-msgs-py \
+    ros-jazzy-ament-copyright ros-jazzy-ament-flake8 ros-jazzy-ament-pep257 \
+    ros-jazzy-demo-nodes-cpp ros-jazzy-demo-nodes-py \
+    && rm -rf /var/lib/apt/lists/*
+
+# Keep PyTorch separate from system Python while retaining ROS dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends python3-venv \
+    && rm -rf /var/lib/apt/lists/* \
+    && python3 -m venv --system-site-packages /opt/venv \
+    && /opt/venv/bin/python -m pip install --no-cache-dir \
+       --index-url https://download.pytorch.org/whl/cpu torch==2.9.1+cpu \
+    && /opt/venv/bin/python -m pip check
+
+# Expose PyTorch to interactive Python and system-Python ROS executables
+ENV PATH=/opt/venv/bin:${PATH}
+ENV PYTHONPATH=/opt/venv/lib/python3.12/site-packages
+
+# Verify tensor operations during the build without fetching model weights
+RUN python -c "import torch; assert torch.__version__ == '2.9.1+cpu'; \
+    assert torch.equal(torch.eye(2) @ torch.ones(2, 2), torch.ones(2, 2))"
+
+# Include visualization and controller inspection in the standard dev image
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-jazzy-rviz2 ros-jazzy-moveit-ros-visualization \
+    ros-jazzy-joint-state-publisher-gui ros-jazzy-ros2controlcli \
+    && rm -rf /var/lib/apt/lists/*
+
+# Reuse startup support for the workspace overlay built in Linux volumes
+COPY deployment/docker/entrypoint.sh /entrypoint.sh
+WORKDIR /ros2_ws
+# Locate models in the shared repository
+ENV AGROBOT_ROOT=/workspace
+# Limit ROS discovery to processes inside the development container
+ENV ROS_DOMAIN_ID=42
+ENV ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST
+ENTRYPOINT ["/bin/bash", "/entrypoint.sh"]
+CMD ["bash"]

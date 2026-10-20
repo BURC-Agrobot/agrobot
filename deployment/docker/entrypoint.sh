@@ -1,18 +1,13 @@
 #!/bin/bash
-# Prepare the shared ROS environment for both CV containers
-# Serve the EVO-X2 AMD ROCm and x86-64 CPU/NVIDIA development images
-# Keep device selection in the perception code and each image's runtime
+# Prepare ROS and the workspace overlay for this Linux development machine
 
 # Stop startup if a required environment setup fails
 set -e
 
-# Default model discovery to the shared workspace and preserve explicit overrides
-export AGROBOT_ROOT="${AGROBOT_ROOT:-/workspace}"
-
 # Source ROS 2 Jazzy environment
 source /opt/ros/jazzy/setup.bash
 
-# Add the local perception packages if the workspace build exists
+# Add all local packages if the workspace build exists
 if [ -f /ros2_ws/install/setup.bash ]; then
     source /ros2_ws/install/setup.bash
     echo "[agrobot] Sourced local ROS 2 workspace overlay."
