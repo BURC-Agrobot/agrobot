@@ -25,8 +25,9 @@ services:
     volumes:
       # Share the display socket and cookie without weakening X11 access control
       - /tmp/.X11-unix:/tmp/.X11-unix:ro
+      # Mount an empty cookie when no cookie is set, as with WSLg displays
       - type: bind
-        source: "${XAUTHORITY:-${HOME}/.Xauthority}"
+        source: "${XAUTHORITY:-/dev/null}"
         target: /run/agrobot.xauth
         read_only: true
         bind:
