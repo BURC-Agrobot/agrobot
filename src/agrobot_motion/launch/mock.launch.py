@@ -2,8 +2,8 @@
 from pathlib import Path
 from xml.etree import ElementTree
 
-# Use a narrow typing exception for the untyped launch package
-from launch import LaunchDescription  # type: ignore[import-untyped]
+# Load typed launch and ROS node descriptions for the mock stack
+from launch import LaunchDescription
 from launch_ros.actions import Node
 # Use a narrow typing exception for the untyped MoveIt builder
 from moveit_configs_utils import MoveItConfigsBuilder  # type: ignore[import-untyped]
