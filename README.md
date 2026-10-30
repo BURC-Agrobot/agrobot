@@ -129,6 +129,60 @@ Open RViz through WSLg:
 ros2 launch agrobot_moveit_config moveit_rviz.launch.py
 ```
 
+## Send joint commands
+
+Keep the mock robot running, and send commands from a second terminal with the
+environment loaded.
+
+Move the arm by replacing `J1` to `J6` with target positions in radians:
+
+```bash
+ros2 action send_goal /agrobot_motion/move_joints agrobot_motion/action/MoveJoints "{group: 0, arm_positions_rad: [J1, J2, J3, J4, J5, J6]}"
+```
+
+Move the rail by replacing `POSITION` with a target position in metres:
+
+```bash
+ros2 action send_goal /agrobot_motion/move_joints agrobot_motion/action/MoveJoints "{group: 1, rail_position_m: POSITION}"
+```
+
+For example, this moves the rail to 0.2 m:
+
+```bash
+ros2 action send_goal /agrobot_motion/move_joints agrobot_motion/action/MoveJoints "{group: 1, rail_position_m: 0.2}"
+```
+
+Add `--feedback` to either command to see each phase of the motion. A successful
+command ends with `code: 0` and `Goal finished with status: SUCCEEDED`.
+
+Show the current positions, listed as arm joints 1 to 6 and then the rail:
+
+```bash
+ros2 topic echo --once /joint_states --field position
+```
+
+Each command must follow these rules:
+
+- Move either the arm or the rail. Leave the other group's field unset or zero.
+- Give all 6 arm joints, because targets are absolute and an omitted joint
+  defaults to 0.
+- Wait for the current command to finish, because a new one is rejected rather
+  than queued.
+- Stay within the joint limits:
+
+| Joint | Lower limit | Upper limit | Unit |
+| --- | --- | --- | --- |
+| `arm_joint_1` | -3.14 | 3.14 | rad |
+| `arm_joint_2` | -1.57 | 1.57 | rad |
+| `arm_joint_3` | -4.5 | 1.5 | rad |
+| `arm_joint_4` | -3.14 | 3.14 | rad |
+| `arm_joint_5` | -5 | 5 | rad |
+| `arm_joint_6` | 0 | 2.09 | rad |
+| `rail_joint` | 0 | 1.565 | m |
+
+If a command prints `Goal was rejected.`, the first terminal's log gives the
+reason.
+
 ## Known problems
 
 - `move_group` segfaults when the mock stack stops.
