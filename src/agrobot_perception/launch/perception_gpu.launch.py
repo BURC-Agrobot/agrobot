@@ -8,7 +8,7 @@ Run after sourcing setup_env.sh:
     ros2 launch agrobot_perception perception.launch.py
     ros2 launch agrobot_perception perception.launch.py confidence_threshold:=0.3
 
-Production config (S4.12 — matches REPRODUCE.md best result):
+Production config (S4.12 — best result):
     AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES="" \\
     ros2 launch agrobot_perception perception.launch.py \\
       depth_topic:=/camera/camera/depth/image_rect_raw \\

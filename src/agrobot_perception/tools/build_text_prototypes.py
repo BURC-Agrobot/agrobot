@@ -29,8 +29,8 @@ This touches NO Laboro label files. The only "supervision" is the text prompt
 Sprint 4: Phase 4.1.
 
 Usage [NUCBOX, ~2h CPU for 643 images]:
-  AGROBOT_FORCE_CPU=1 PYTHONPATH=perception \\
-    python3 perception/tools/build_text_prototypes.py \\
+  AGROBOT_FORCE_CPU=1 PYTHONPATH=src/agrobot_perception \\
+    python3 src/agrobot_perception/tools/build_text_prototypes.py \\
     --train-images data/Laboro-Tomato/train/images \\
     --output models/query_embedding_text_k4.pt \\
     --output-negative models/negative_embedding_text.pt \\
@@ -50,6 +50,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from PIL import Image
+from agrobot_perception.utils.repo_root import find_repo_root
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -147,7 +148,7 @@ def main() -> None:
     parser.add_argument("--max-images", type=int, default=0)
     args = parser.parse_args()
 
-    repo_root = Path(__file__).resolve().parent.parent.parent
+    repo_root = find_repo_root()
     os.chdir(repo_root)
     train_images = args.train_images if args.train_images.is_absolute() \
         else repo_root / args.train_images

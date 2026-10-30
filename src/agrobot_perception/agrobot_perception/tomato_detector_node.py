@@ -382,7 +382,7 @@ class TomatoDetectorNode(Node):
         """Run if no camera frame arrived within watchdog_timeout_ms.
 
         Publishes empty detections + safe_to_pick=False so the planner gets
-        an explicit signal rather than silence. See FM-1 in docs/FAILURE_MODES.md.
+        an explicit signal rather than silence.
         """
         if self._last_frame_time == 0.0:
             # Node just started, no frame ever received yet — don't alarm

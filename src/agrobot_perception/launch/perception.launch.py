@@ -8,7 +8,7 @@ Run after sourcing setup_env.sh:
     ros2 launch agrobot_perception perception.launch.py
     ros2 launch agrobot_perception perception.launch.py mlp_confidence_threshold:=0.5
 
-Production config (P2.2 — current best, see REPRODUCE.md):
+Production config (P2.2 — current best):
     ros2 launch agrobot_perception perception.launch.py \\
       depth_topic:=/camera/camera/depth/image_rect_raw \\
       depth_camera_info_topic:=/camera/camera/depth/camera_info

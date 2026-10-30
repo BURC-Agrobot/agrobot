@@ -21,13 +21,13 @@ live pipeline (detector → spatial → tracker → qwen_vl) already publishing.
 Requires an X11 display:
   SSH with X11:  ssh -X <user>@<nucbox_ip>   # then run the command below
   Headless:      Xvfb :99 -screen 0 1280x800x24 &
-                 DISPLAY=:99 PYTHONPATH=perception python3 ...
+                 DISPLAY=:99 PYTHONPATH=src/agrobot_perception python3 ...
 
 Sprint: 4 — HIL visualization for VLM-guided pick selection.
 
 Usage
 -----
-    PYTHONPATH=perception python3 perception/tools/viz_dashboard.py
+    PYTHONPATH=src/agrobot_perception python3 src/agrobot_perception/tools/viz_dashboard.py
 
 Subscribed topics (11)
 -----------------------

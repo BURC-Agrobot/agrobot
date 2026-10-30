@@ -26,8 +26,8 @@ Ground truth masks:
 
 Usage (from repository root):
   # Smoke-test: 10 images, 2 epochs (~2 min on CPU, confirms the loop runs)
-  AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES="" PYTHONPATH=perception \\
-    python3 perception/tools/finetune_sam2_decoder.py \\
+  AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES="" PYTHONPATH=src/agrobot_perception \\
+    python3 src/agrobot_perception/tools/finetune_sam2_decoder.py \\
     --train-images data/Laboro-Tomato/train/images \\
     --train-labels data/Laboro-Tomato/train/labels \\
     --sam2-checkpoint models/sam2/sam2.1_hiera_small.pt \\
@@ -35,8 +35,8 @@ Usage (from repository root):
     --epochs 2 --max-images 10
 
   # Full training: 643 images, 10 epochs (~45–90 min on NucBox CPU)
-  AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES="" PYTHONPATH=perception \\
-    python3 perception/tools/finetune_sam2_decoder.py \\
+  AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES="" PYTHONPATH=src/agrobot_perception \\
+    python3 src/agrobot_perception/tools/finetune_sam2_decoder.py \\
     --train-images data/Laboro-Tomato/train/images \\
     --train-labels data/Laboro-Tomato/train/labels \\
     --sam2-checkpoint models/sam2/sam2.1_hiera_small.pt \\
@@ -44,8 +44,8 @@ Usage (from repository root):
     --epochs 10
 
 After training, run eval with the fine-tuned checkpoint:
-  AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES="" PYTHONPATH=perception \\
-    python3 perception/eval/run_eval.py \\
+  AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES="" PYTHONPATH=src/agrobot_perception \\
+    python3 src/agrobot_perception/eval/run_eval.py \\
     --val-list data/val_list.txt \\
     --gt-csv data/val_gt.csv \\
     --sam2-checkpoint models/sam2/sam2_tomato_finetuned.pt \\
@@ -65,6 +65,7 @@ import cv2
 import numpy as np
 import torch
 import torch.nn.functional as F
+from agrobot_perception.utils.repo_root import find_repo_root
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -389,8 +390,8 @@ def train(
     logger.info("")
     logger.info("Run eval with fine-tuned weights:")
     logger.info(
-        "  AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES=\"\" PYTHONPATH=perception "
-        "python3 perception/eval/run_eval.py "
+        "  AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES=\"\" PYTHONPATH=src/agrobot_perception "
+        "python3 src/agrobot_perception/eval/run_eval.py "
         "--val-list data/val_list.txt "
         "--gt-csv data/val_gt.csv "
         "--confidence 0.3"
@@ -423,7 +424,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    repo_root = Path(__file__).resolve().parent.parent.parent
+    repo_root = find_repo_root()
     os.chdir(repo_root)
 
     def _abs(p: Path) -> Path:

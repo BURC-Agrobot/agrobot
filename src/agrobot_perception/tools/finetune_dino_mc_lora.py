@@ -2,7 +2,7 @@
 """
 finetune_dino_mc_lora.py — Mask-Conditioned LoRA fine-tuning of DINOv2 (Phase 3.1).
 
-Why this replaces perception/tools/finetune_dino_lora.py (which collapsed at
+Why this replaces src/agrobot_perception/tools/finetune_dino_lora.py (which collapsed at
 mAP=0.035):
   The original file had three independent defects that each harmed training.
   This file corrects all three so the paper can evaluate their separate effects:
@@ -64,8 +64,8 @@ Loss formulation (canonical SimCLR / NT-Xent, mask-weighted):
 Sprint 4: Phase 3.1.
 
 Usage [NUCBOX CPU, ~36h for 643 images, 8 epochs]:
-  AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES="" PYTHONPATH=perception \\
-    python3 perception/tools/finetune_dino_mc_lora.py \\
+  AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES="" PYTHONPATH=src/agrobot_perception \\
+    python3 src/agrobot_perception/tools/finetune_dino_mc_lora.py \\
     --coco-json data/Laboro-Tomato/annotations/train.json \\
     --train-images data/Laboro-Tomato/train/images \\
     --output models/dino_mc_lora.pt \\
@@ -73,7 +73,7 @@ Usage [NUCBOX CPU, ~36h for 643 images, 8 epochs]:
     --batch-size 8 --pos-per-image 16 --neg-per-image 16
 
 After training, rebuild the query embedding with the LoRA backbone:
-  PYTHONPATH=perception python3 perception/tools/build_query_embedding.py \\
+  PYTHONPATH=src/agrobot_perception python3 src/agrobot_perception/tools/build_query_embedding.py \\
     --train-images data/Laboro-Tomato/train/images \\
     --train-labels data/Laboro-Tomato/train/labels \\
     --output models/query_embedding_mc_lora_k4.pt \\
@@ -102,6 +102,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
+from agrobot_perception.utils.repo_root import find_repo_root
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -536,7 +537,7 @@ def main() -> None:
     parser.add_argument("--coco-json-aux", type=Path, nargs="*", default=[],
                         help="Additional COCO JSON files to UNION with --coco-json. "
                              "Used by Phase 3.2 self-training to add pseudo-labels "
-                             "produced by perception/tools/generate_pseudo_labels.py.")
+                             "produced by src/agrobot_perception/tools/generate_pseudo_labels.py.")
     parser.add_argument("--train-images", type=Path, required=True)
     parser.add_argument("--output", type=Path, default=Path("models/dino_mc_lora.pt"))
     parser.add_argument("--epochs", type=int, default=8)
@@ -556,7 +557,7 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
 
-    repo_root = Path(__file__).resolve().parent.parent.parent
+    repo_root = find_repo_root()
     os.chdir(repo_root)
     coco = args.coco_json if args.coco_json.is_absolute() else repo_root / args.coco_json
     imgs = args.train_images if args.train_images.is_absolute() else repo_root / args.train_images

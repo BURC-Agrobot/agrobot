@@ -69,7 +69,7 @@ _DEFAULT_SAM2_CKPT = "models/sam2/sam2.1_hiera_small.pt"
 # Config path is relative to the sam2 package root (not the repository root)
 # build_sam2() resolves this via Hydra's pkg://sam2 search path
 _DEFAULT_SAM2_CFG = "configs/sam2.1/sam2.1_hiera_s.yaml"
-# Data-driven query embedding built by perception/tools/build_query_embedding.py
+# Data-driven query embedding built by src/agrobot_perception/tools/build_query_embedding.py
 # When present, replaces the hardcoded RGB prior below
 _DEFAULT_QUERY_EMBEDDING = "models/query_embedding.pt"
 
@@ -219,7 +219,7 @@ class DINOv2SAM2Detector:
 
         Priority:
           1. Load from models/query_embedding.pt if present (built by
-             perception/tools/build_query_embedding.py from Laboro Tomato
+             src/agrobot_perception/tools/build_query_embedding.py from Laboro Tomato
              training patches). This gives data-driven, colour-agnostic features.
           2. Otherwise, use the hardcoded red/orange RGB prior (zero-shot baseline).
 
@@ -235,7 +235,7 @@ class DINOv2SAM2Detector:
 
         logger.info(
             "No query embedding at %s. Using hardcoded RGB prior. "
-            "Run perception/tools/build_query_embedding.py to build a better one.",
+            "Run src/agrobot_perception/tools/build_query_embedding.py to build a better one.",
             query_path,
         )
         mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)

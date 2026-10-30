@@ -25,11 +25,11 @@ Sprint 4: Phase 3.3.
 
 Usage [NUCBOX CPU, ~6h for 100 epochs at 643 train images]:
   pip install ultralytics --break-system-packages   # one-time
-  AGROBOT_FORCE_CPU=1 PYTHONPATH=perception \\
-    python3 perception/tools/train_yolo_baseline.py --epochs 100
+  AGROBOT_FORCE_CPU=1 PYTHONPATH=src/agrobot_perception \\
+    python3 src/agrobot_perception/tools/train_yolo_baseline.py --epochs 100
 
 Then evaluate on the same val_list:
-  python3 perception/tools/run_baselines.py \\
+  python3 src/agrobot_perception/tools/run_baselines.py \\
     --model yolov8 --weights runs/detect/yolov8n_laboro/weights/best.pt \\
     --val-list data/val_list.txt --gt-csv data/val_gt.csv --metric coco
 """

@@ -2,7 +2,7 @@
 metrics_coco.py — COCO-style detection metrics for paper-grade reporting.
 
 Why this exists:
-  perception/eval/metrics.py reports only mAP@0.5.
+  src/agrobot_perception/eval/metrics.py reports only mAP@0.5.
   This supports sprint tracking but is insufficient for any peer-reviewed publication.
   Detection publications require COCO mAP over 10 IoU thresholds (0.50:0.05:0.95).
   They also require AP by area: AP_S, AP_M, and AP_L.

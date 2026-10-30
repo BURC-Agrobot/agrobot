@@ -15,14 +15,14 @@ Why this matters:
 
 Usage (from repository root):
   # [MAC] host (uses MPS)
-  PYTHONPATH=perception python3 perception/tools/build_query_embedding.py \
+  PYTHONPATH=src/agrobot_perception python3 src/agrobot_perception/tools/build_query_embedding.py \
     --train-images data/Laboro-Tomato/train/images \
     --train-labels data/Laboro-Tomato/train/labels \
     --output models/query_embedding.pt
 
   # [NUCBOX] with ROCm
-  AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES="" PYTHONPATH=perception \
-    python3 perception/tools/build_query_embedding.py \
+  AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES="" PYTHONPATH=src/agrobot_perception \
+    python3 src/agrobot_perception/tools/build_query_embedding.py \
     --train-images data/Laboro-Tomato/train/images \
     --train-labels data/Laboro-Tomato/train/labels \
     --output models/query_embedding.pt
@@ -45,6 +45,7 @@ import cv2
 import numpy as np
 import torch
 import torch.nn.functional as F
+from agrobot_perception.utils.repo_root import find_repo_root
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -341,8 +342,8 @@ def build_embedding(
         logger.warning("No negative patches collected. Skipping negative embedding.")
 
     logger.info("Done. Re-run eval to get detections:")
-    logger.info("  AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES=\"\" PYTHONPATH=perception "
-                "python3 perception/eval/run_eval.py --val-list data/val_list.txt --confidence 0.2")
+    logger.info("  AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES=\"\" PYTHONPATH=src/agrobot_perception "
+                "python3 src/agrobot_perception/eval/run_eval.py --val-list data/val_list.txt --confidence 0.2")
 
 
 def main() -> None:
@@ -389,7 +390,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    repo_root = Path(__file__).resolve().parent.parent.parent
+    repo_root = find_repo_root()
     os.chdir(repo_root)
 
     train_images = args.train_images if args.train_images.is_absolute() \

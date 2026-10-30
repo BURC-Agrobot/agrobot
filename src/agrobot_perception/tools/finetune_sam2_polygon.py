@@ -20,8 +20,8 @@ Training changes vs rect version:
 
 Usage (from repository root):
   # Smoke-test: 10 images, 2 epochs (~3 min on NucBox CPU)
-  AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES="" PYTHONPATH=perception \\
-    python3 perception/tools/finetune_sam2_polygon.py \\
+  AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES="" PYTHONPATH=src/agrobot_perception \\
+    python3 src/agrobot_perception/tools/finetune_sam2_polygon.py \\
     --coco-json data/Laboro-Tomato/annotations/train.json \\
     --train-images data/Laboro-Tomato/train/images \\
     --sam2-checkpoint models/sam2/sam2.1_hiera_small.pt \\
@@ -29,8 +29,8 @@ Usage (from repository root):
     --epochs 2 --max-images 10
 
   # Full training: 643 images, 5 epochs (~45–60 min on NucBox CPU)
-  AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES="" PYTHONPATH=perception \\
-    python3 perception/tools/finetune_sam2_polygon.py \\
+  AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES="" PYTHONPATH=src/agrobot_perception \\
+    python3 src/agrobot_perception/tools/finetune_sam2_polygon.py \\
     --coco-json data/Laboro-Tomato/annotations/train.json \\
     --train-images data/Laboro-Tomato/train/images \\
     --sam2-checkpoint models/sam2/sam2.1_hiera_small.pt \\
@@ -54,6 +54,7 @@ import torch
 import torch.nn.functional as F
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
+from agrobot_perception.utils.repo_root import find_repo_root
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -445,8 +446,8 @@ def train(
     logger.info("")
     logger.info("Run eval:")
     logger.info(
-        "  AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES=\"\" PYTHONPATH=perception "
-        "python3 perception/eval/run_eval.py "
+        "  AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES=\"\" PYTHONPATH=src/agrobot_perception "
+        "python3 src/agrobot_perception/eval/run_eval.py "
         "--val-list data/val_list.txt --gt-csv data/val_gt.csv --confidence 0.3"
     )
 
@@ -469,7 +470,7 @@ def main() -> None:
                         help="0 = all. Use 10 for smoke-test.")
     args = parser.parse_args()
 
-    repo_root = Path(__file__).resolve().parent.parent.parent
+    repo_root = find_repo_root()
     os.chdir(repo_root)
 
     def _abs(p: Path) -> Path:

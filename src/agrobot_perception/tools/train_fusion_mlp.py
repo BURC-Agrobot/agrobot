@@ -5,7 +5,7 @@ train_fusion_mlp.py — Train the late-fusion MLP head on dumped train detection
 Workflow (Phase 2.2):
   1. Build a train-list (for example, data/train_list.txt) and train_gt.csv from
      data/Laboro-Tomato/annotations/train.json polygons -> bbox.
-  2. Run perception/eval/run_eval.py with --siglip --fusion-features-out
+  2. Run src/agrobot_perception/eval/run_eval.py with --siglip --fusion-features-out
      features_train.jsonl over the train list at conf=0 to dump every detection
      with its 7 features attached.
   3. Load the JSONL file and training GT with this script.
@@ -176,7 +176,7 @@ def main() -> None:
     X_train_n = (X_train - mean) / std
     X_val_n = (X_val - mean) / std
 
-    sys.path.insert(0, str(repo_root / "perception"))
+    sys.path.insert(0, str(repo_root / "src" / "agrobot_perception"))
     from eval.fusion_mlp import FusionMLP, N_FEATURES
 
     model = FusionMLP(in_dim=N_FEATURES)
@@ -237,8 +237,8 @@ def main() -> None:
     logger.info("")
     logger.info("Eval with learned fusion:")
     logger.info(
-        "  AGROBOT_FORCE_CPU=1 PYTHONPATH=perception "
-        "python3 perception/eval/run_eval.py "
+        "  AGROBOT_FORCE_CPU=1 PYTHONPATH=src/agrobot_perception "
+        "python3 src/agrobot_perception/eval/run_eval.py "
         "--val-list data/val_list.txt --gt-csv data/val_gt.csv "
         "--detector sam2_amg --amg-points 28 --siglip --fusion-mlp %s "
         "--metric coco --confidence 0.0 --max-detections 30 --nms-iou 0.5",

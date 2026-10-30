@@ -33,8 +33,8 @@ Why COCO-polygon output (not bbox-only):
 Sprint 4: Phase 3.2.
 
 Usage [NUCBOX, ~50 min CPU for 643 images]:
-  AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES="" PYTHONPATH=perception \\
-    python3 perception/tools/generate_pseudo_labels.py \\
+  AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES="" PYTHONPATH=src/agrobot_perception \\
+    python3 src/agrobot_perception/tools/generate_pseudo_labels.py \\
     --train-list data/train_list.txt \\
     --output data/Laboro-Tomato/annotations/pseudo_train.json \\
     --detector sam2_amg --amg-points 28 --max-detections 60 \\
@@ -67,7 +67,7 @@ from agrobot_perception.utils.repo_root import find_repo_root
 
 
 def _setup_path(repo_root: Path) -> None:
-    perception_dir = repo_root / "perception"
+    perception_dir = repo_root / "src" / "agrobot_perception"
     if str(perception_dir) not in sys.path:
         sys.path.insert(0, str(perception_dir))
 

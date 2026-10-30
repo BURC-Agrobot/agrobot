@@ -27,25 +27,25 @@ Loss:
   This is equivalent to encouraging the model to place tomato patches together
   and background patches far away in L2-normalised embedding space.
 
-Usage [NUCBOX] (requires ROCm unblocked — see docs/SPRINT3_ROCM_ISSUE.md):
-  PYTHONPATH=perception \\
-    python3 perception/tools/finetune_dino_lora.py \\
+Usage [NUCBOX] (requires ROCm unblocked):
+  PYTHONPATH=src/agrobot_perception \\
+    python3 src/agrobot_perception/tools/finetune_dino_lora.py \\
     --train-images data/Laboro-Tomato/train/images \\
     --train-labels data/Laboro-Tomato/train/labels \\
     --output models/dino_lora.pt \\
     --epochs 10 --rank 8 --lora-blocks 4
 
 Usage [MAC] (smoke-test on CPU, ~30min for 10 images):
-  AGROBOT_FORCE_CPU=1 PYTHONPATH=perception \\
-    python3 perception/tools/finetune_dino_lora.py \\
+  AGROBOT_FORCE_CPU=1 PYTHONPATH=src/agrobot_perception \\
+    python3 src/agrobot_perception/tools/finetune_dino_lora.py \\
     --train-images data/Laboro-Tomato/train/images \\
     --train-labels data/Laboro-Tomato/train/labels \\
     --output models/dino_lora.pt \\
     --epochs 2 --max-images 10
 
 After training, point the detector at the LoRA model:
-  AGROBOT_FORCE_CPU=1 PYTHONPATH=perception \\
-    python3 perception/eval/run_eval.py \\
+  AGROBOT_FORCE_CPU=1 PYTHONPATH=src/agrobot_perception \\
+    python3 src/agrobot_perception/eval/run_eval.py \\
     --detector sam2_amg --amg-points 20 --confidence 0.2 \\
     --negative-weight 1.0 --nms-iou 0.5 \\
     --dino-lora-path models/dino_lora.pt
@@ -69,6 +69,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
+from agrobot_perception.utils.repo_root import find_repo_root
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -379,13 +380,13 @@ def train(
     logger.info("")
     logger.info(
         "Rebuild query embedding with LoRA model then run eval:\n"
-        "  PYTHONPATH=perception python3 perception/tools/build_query_embedding.py \\\n"
+        "  PYTHONPATH=src/agrobot_perception python3 src/agrobot_perception/tools/build_query_embedding.py \\\n"
         "    --train-images data/Laboro-Tomato/train/images \\\n"
         "    --train-labels data/Laboro-Tomato/train/labels \\\n"
         "    --output models/query_embedding_lora.pt \\\n"
         "    --dino-lora-path models/dino_lora.pt\n"
         "\n"
-        "  PYTHONPATH=perception python3 perception/eval/run_eval.py \\\n"
+        "  PYTHONPATH=src/agrobot_perception python3 src/agrobot_perception/eval/run_eval.py \\\n"
         "    --detector sam2_amg --amg-points 20 --confidence 0.2 \\\n"
         "    --negative-weight 1.0 --nms-iou 0.5 \\\n"
         "    --dino-lora-path models/dino_lora.pt \\\n"
@@ -414,7 +415,7 @@ def main() -> None:
     parser.add_argument("--max-images", type=int, default=0, help="0 = all.")
     args = parser.parse_args()
 
-    repo_root = Path(__file__).resolve().parent.parent.parent
+    repo_root = find_repo_root()
     os.chdir(repo_root)
 
     def _abs(p: Path) -> Path:

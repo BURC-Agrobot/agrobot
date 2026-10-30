@@ -29,18 +29,18 @@ Why tracing not scripting:
 
 Usage (from repository root):
   # [MAC] — runs on MPS (fast) or CPU
-  PYTHONPATH=perception python3 perception/tools/export_dino_onnx.py \
+  PYTHONPATH=src/agrobot_perception python3 src/agrobot_perception/tools/export_dino_onnx.py \
     --output models/dino_vitb14_patches.onnx
 
   # Verify the exported graph
-  python3 perception/tools/export_dino_onnx.py --verify \
+  python3 src/agrobot_perception/tools/export_dino_onnx.py --verify \
     --output models/dino_vitb14_patches.onnx
 
   # Then transfer to NucBox
   bash tools/network/setup/model_sync.sh --onnx models/dino_vitb14_patches.onnx
 
   # If MIGraphX segfaults on gfx1151, try fixed batch (rules out dynamic-shape):
-  PYTHONPATH=perception python3 perception/tools/export_dino_onnx.py \
+  PYTHONPATH=src/agrobot_perception python3 src/agrobot_perception/tools/export_dino_onnx.py \
     --output models/dino_vitb14_patches_fixed.onnx --fixed-batch
 
 On NucBox (Sprint 3.2):
@@ -64,6 +64,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn.functional as F
+from agrobot_perception.utils.repo_root import find_repo_root
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -225,7 +226,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    repo_root = Path(__file__).resolve().parent.parent.parent
+    repo_root = find_repo_root()
     os.chdir(repo_root)
 
     output = args.output if args.output.is_absolute() else repo_root / args.output

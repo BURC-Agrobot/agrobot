@@ -3,20 +3,20 @@
 run_eval.py — Run the tomato detector on a validation set and report metrics.
 
 Sprint 2: mAP@0.5 (if ground truth provided), latency mean/p99, and per-image
-detection counts. Used for ablation (DINOv2-only vs DINOv2+SAM2) and REPRODUCE.md.
+detection counts. Used for ablation (DINOv2-only vs DINOv2+SAM2).
 
 Usage (from repository root):
-  PYTHONPATH=perception python perception/eval/run_eval.py --val-list data/val_list.txt
-  PYTHONPATH=perception python perception/eval/run_eval.py --val-list data/val_list.txt --gt-csv data/val_gt.csv
-  PYTHONPATH=perception python perception/eval/run_eval.py --val-list data/val_list.txt --detector dino_only
+  PYTHONPATH=src/agrobot_perception python src/agrobot_perception/eval/run_eval.py --val-list data/val_list.txt
+  PYTHONPATH=src/agrobot_perception python src/agrobot_perception/eval/run_eval.py --val-list data/val_list.txt --gt-csv data/val_gt.csv
+  PYTHONPATH=src/agrobot_perception python src/agrobot_perception/eval/run_eval.py --val-list data/val_list.txt --detector dino_only
 
 From the repository root:
-  PYTHONPATH=perception python perception/eval/run_eval.py --val-list data/val_list.txt
+  PYTHONPATH=src/agrobot_perception python src/agrobot_perception/eval/run_eval.py --val-list data/val_list.txt
 
 With visualizations (HTML report + annotated images):
   ... --visualize-dir eval_reports/run_001
 
-Requires: AGROBOT_ROOT or run from repository root so models/sam2/ and torch.hub resolve.
+Requires: AGROBOT_ROOT, set by setup_env.sh, so models/sam2/ and torch.hub resolve.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from agrobot_perception.utils.repo_root import find_repo_root
 
 
 def _setup_path(repo_root: Path) -> None:
-    perception_dir = repo_root / "perception"
+    perception_dir = repo_root / "src" / "agrobot_perception"
     if str(perception_dir) not in sys.path:
         sys.path.insert(0, str(perception_dir))
 
@@ -157,7 +157,7 @@ def main() -> None:
         default=None,
         help=(
             "[sam2_amg/sam2_semantic] Path to MIGraphX compiled DINOv2 .mxr file. "
-            "[NUCBOX] only. Requires ROCm + MIGraphX (blocked: see docs/SPRINT3_ROCM_ISSUE.md). "
+            "[NUCBOX] only. Requires ROCm + MIGraphX (blocked on gfx1151). "
             "When present, replaces PyTorch DINOv2 forward with MIGraphX inference (~20ms vs ~350ms)."
         ),
     )
@@ -196,7 +196,7 @@ def main() -> None:
             "Phase 2.2 step 1: dump per-detection fusion features to this JSONL "
             "file (one line per image). Pair with --siglip and a low --confidence "
             "to get a dense feature dump suitable for training a fusion MLP via "
-            "perception/tools/train_fusion_mlp.py."
+            "src/agrobot_perception/tools/train_fusion_mlp.py."
         ),
     )
     parser.add_argument(
@@ -292,7 +292,7 @@ def main() -> None:
             "Dump raw detections (box, score, label) per image to a JSONL file. "
             "Pair with --confidence 0 --nms-iou 0 --max-detections 1000 to capture "
             "the full pre-filter detection set so a post-hoc sweep over (conf, nms, max_det) "
-            "can be replayed cheaply via perception/eval/sweep_post_filter.py."
+            "can be replayed cheaply via src/agrobot_perception/eval/sweep_post_filter.py."
         ),
     )
     parser.add_argument(

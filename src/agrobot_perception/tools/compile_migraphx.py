@@ -17,15 +17,15 @@ What this script does:
   3. Caches the compiled binary alongside the ONNX file.
   4. Optionally runs a benchmark (migraphx-driver perf equivalent).
 
-Blocked on: ROCm gfx1151 kernel conflict (see docs/SPRINT3_ROCM_ISSUE.md).
+Blocked on: ROCm gfx1151 kernel conflict.
 When unblocked, run:
-  python3 perception/tools/compile_migraphx.py \
+  python3 src/agrobot_perception/tools/compile_migraphx.py \
     --onnx models/dino_vitb14_patches.onnx \
     --output models/dino_vitb14_patches.mxr \
     --benchmark
 
 Then update run_eval.py to use the MIGraphX runtime path:
-  PYTHONPATH=perception python3 perception/eval/run_eval.py \
+  PYTHONPATH=src/agrobot_perception python3 src/agrobot_perception/eval/run_eval.py \
     --detector sam2_amg --amg-points 20 --confidence 0.2 \
     --negative-weight 1.0 --nms-iou 0.5 \
     --migraphx-dino models/dino_vitb14_patches.mxr
@@ -44,6 +44,7 @@ import time
 from pathlib import Path
 
 import numpy as np
+from agrobot_perception.utils.repo_root import find_repo_root
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -61,8 +62,7 @@ def _require_migraphx():
     except ImportError:
         logger.error(
             "migraphx Python bindings not found. "
-            "This script requires ROCm + MIGraphX (AMD NucBox / NUCBOX only). "
-            "See docs/SPRINT3_ROCM_ISSUE.md for the current blocking issue."
+            "This script requires ROCm + MIGraphX (AMD NucBox / NUCBOX only)."
         )
         sys.exit(1)
 
@@ -181,7 +181,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    repo_root = Path(__file__).resolve().parent.parent.parent
+    repo_root = find_repo_root()
     os.chdir(repo_root)
 
     onnx_path = args.onnx if args.onnx.is_absolute() else repo_root / args.onnx
@@ -195,7 +195,7 @@ def main() -> None:
         if not onnx_path.exists():
             logger.error("ONNX file not found: %s", onnx_path)
             logger.error(
-                "Run first: PYTHONPATH=perception python3 perception/tools/export_dino_onnx.py"
+                "Run first: PYTHONPATH=src/agrobot_perception python3 src/agrobot_perception/tools/export_dino_onnx.py"
             )
             sys.exit(1)
         compile_onnx(onnx_path, output_path, gpu=not args.cpu, fp16=args.fp16)

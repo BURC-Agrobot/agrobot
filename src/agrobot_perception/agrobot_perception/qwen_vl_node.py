@@ -80,6 +80,7 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String, Header
 from geometry_msgs.msg import PoseStamped
+from agrobot_perception.utils.repo_root import find_repo_root
 
 try:
     from PIL import Image as PILImage
@@ -340,7 +341,7 @@ class QwenVLNode(Node):
         )
         try:
             # Check for local save first (avoids re-download after first run)
-            repo_root = Path(__file__).resolve().parent.parent.parent.parent
+            repo_root = find_repo_root()
             local_path = repo_root / "models" / "qwen_vl"
             source = str(local_path) if local_path.exists() else self._model_path
 

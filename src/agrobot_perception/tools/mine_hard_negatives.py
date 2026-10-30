@@ -32,16 +32,16 @@ Protocol:
   4. Stack all FP patches → mean → L2-normalise → save to hard_negative_embedding.pt.
 
 Usage [MAC]:
-  AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES="" PYTHONPATH=perception \\
-    python3 perception/tools/mine_hard_negatives.py \\
+  AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES="" PYTHONPATH=src/agrobot_perception \\
+    python3 src/agrobot_perception/tools/mine_hard_negatives.py \\
     --val-list data/val_list.txt \\
     --gt-csv data/val_gt.csv \\
     --output models/hard_negative_embedding.pt \\
     --amg-points 20 --confidence 0.2 --negative-weight 0.0
 
   Then eval with the mined embedding:
-  AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES="" PYTHONPATH=perception \\
-    python3 perception/eval/run_eval.py \\
+  AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES="" PYTHONPATH=src/agrobot_perception \\
+    python3 src/agrobot_perception/eval/run_eval.py \\
     --val-list data/val_list.txt --gt-csv data/val_gt.csv \\
     --detector sam2_amg --amg-points 20 --confidence 0.2 \\
     --negative-weight 1.2 --nms-iou 0.5
@@ -63,6 +63,7 @@ import cv2
 import numpy as np
 import torch
 import torch.nn.functional as F
+from agrobot_perception.utils.repo_root import find_repo_root
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -133,9 +134,9 @@ def main() -> None:
                         help="Cap on total FP patch vectors to keep (memory guard).")
     args = parser.parse_args()
 
-    repo_root = Path(__file__).resolve().parent.parent.parent
+    repo_root = find_repo_root()
     os.chdir(repo_root)
-    sys.path.insert(0, str(repo_root / "perception"))
+    sys.path.insert(0, str(repo_root / "src" / "agrobot_perception"))
 
     from agrobot_perception.utils.image_utils import preprocess_for_dino
     from agrobot_perception.detectors.sam2_amg_detector import SAM2AMGDetector
@@ -264,8 +265,8 @@ def main() -> None:
     logger.info("")
     logger.info("Eval with the new hard-negative embedding:")
     logger.info(
-        "  AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES=\"\" PYTHONPATH=perception "
-        "python3 perception/eval/run_eval.py "
+        "  AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES=\"\" PYTHONPATH=src/agrobot_perception "
+        "python3 src/agrobot_perception/eval/run_eval.py "
         "--val-list data/val_list.txt --gt-csv data/val_gt.csv "
         "--detector sam2_amg --amg-points 20 --confidence 0.2 "
         "--negative-weight 1.2 --nms-iou 0.5 "

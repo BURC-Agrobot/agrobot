@@ -20,7 +20,7 @@ Why this codebase's TTA does NOT include true 518/700 multi-scale:
   patch grid (= 518/14). Running at 700² would change the grid to 50x50 and
   invalidate every patch->mask coverage assumption inside SAM2AMGDetector.
   A pseudo-multi-scale via crop-and-resize is already implemented as
-  --amg-crops (perception/agrobot_perception/detectors/sam2_amg_detector.py
+  --amg-crops (src/agrobot_perception/agrobot_perception/detectors/sam2_amg_detector.py
   line 431, _generate_quadrant_masks). This wrapper composes cleanly with that
   flag — when both --tta and --amg-crops are set, each TTA pass internally
   generates full-image + 4 quadrant proposals.

@@ -23,14 +23,14 @@ Why per-image dimension reading:
   a different resolution.
 
 Usage (from repository root):
-  python3 perception/tools/build_val_gt_csv.py \
+  python3 src/agrobot_perception/tools/build_val_gt_csv.py \
     --val-images data/Laboro-Tomato/val/images \
     --val-labels data/Laboro-Tomato/val/labels \
     --output data/val_gt.csv
 
   Then run eval with mAP:
-    AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES="" PYTHONPATH=perception \\
-      python3 perception/eval/run_eval.py \\
+    AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES="" PYTHONPATH=src/agrobot_perception \\
+      python3 src/agrobot_perception/eval/run_eval.py \\
       --val-list data/val_list.txt \\
       --gt-csv data/val_gt.csv \\
       --confidence 0.3
@@ -45,6 +45,7 @@ import sys
 from pathlib import Path
 
 import cv2
+from agrobot_perception.utils.repo_root import find_repo_root
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -107,7 +108,7 @@ def build_csv(
 ) -> None:
     # Determine which images to process
     if val_list and val_list.exists():
-        repo_root = Path(__file__).resolve().parent.parent.parent
+        repo_root = find_repo_root()
         image_paths = []
         with open(val_list) as f:
             for line in f:
@@ -166,7 +167,7 @@ def build_csv(
                         continue
 
                     # image_path stored relative to repository root for portability
-                    repo_root = Path(__file__).resolve().parent.parent.parent
+                    repo_root = find_repo_root()
                     try:
                         rel_path = img_path.relative_to(repo_root)
                     except ValueError:
@@ -210,7 +211,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    repo_root = Path(__file__).resolve().parent.parent.parent
+    repo_root = find_repo_root()
 
     val_images = args.val_images if args.val_images.is_absolute() \
         else repo_root / args.val_images

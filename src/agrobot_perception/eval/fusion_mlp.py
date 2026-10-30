@@ -32,7 +32,7 @@ Usage flow (Phase 2.2):
                    --siglip --fusion-features-out features_train.jsonl \\
                    --confidence 0.0 --max-detections 1000 --nms-iou 0.0
   2. Train MLP:
-       python perception/tools/train_fusion_mlp.py \\
+       python src/agrobot_perception/tools/train_fusion_mlp.py \\
               --features features_train.jsonl --output models/fusion_mlp.pt
   3. Eval with learned fusion:
        run_eval.py --val-list data/val_list.txt --gt-csv data/val_gt.csv \\
@@ -240,7 +240,7 @@ class FeatureDumpWrapper:
     """Runs the inner detector, computes features per detection, writes JSONL.
 
     Used by the train-set dump step (Phase 2.2 step 1). Produces input for
-    perception/tools/train_fusion_mlp.py. Does NOT change the score (so the
+    src/agrobot_perception/tools/train_fusion_mlp.py. Does NOT change the score (so the
     dump-time NMS reflects the existing detector ordering).
 
     Each output line: {image_path, detections: [{box, score, dino_sim, ...,

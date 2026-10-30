@@ -9,21 +9,21 @@ Phase 3.3 deliverables for the paper comparison table:
 
 All three produce detections in 518x518 letterboxed pixel space (the same
 coordinate system val_gt.csv uses), so the resulting numbers are directly
-comparable to perception/eval/run_eval.py + perception/eval/metrics_coco.py.
+comparable to src/agrobot_perception/eval/run_eval.py + src/agrobot_perception/eval/metrics_coco.py.
 
 Usage [NUCBOX CPU]:
   # YOLOv8 (after train_yolo_baseline.py finishes)
-  python3 perception/tools/run_baselines.py \\
+  python3 src/agrobot_perception/tools/run_baselines.py \\
     --model yolov8 --weights runs/detect/yolov8n_laboro/weights/best.pt \\
     --val-list data/val_list.txt --gt-csv data/val_gt.csv --metric coco
 
   # Grounding-DINO (HF auto-download ~1 GB on first run)
-  python3 perception/tools/run_baselines.py \\
+  python3 src/agrobot_perception/tools/run_baselines.py \\
     --model grounding_dino --prompt "tomato." \\
     --val-list data/val_list.txt --gt-csv data/val_gt.csv --metric coco
 
   # OWL-ViT v2
-  python3 perception/tools/run_baselines.py \\
+  python3 src/agrobot_perception/tools/run_baselines.py \\
     --model owl_vit_v2 --prompt "a photo of a tomato" \\
     --val-list data/val_list.txt --gt-csv data/val_gt.csv --metric coco
 
@@ -52,7 +52,7 @@ from agrobot_perception.utils.repo_root import find_repo_root
 
 
 def _setup_path(repo_root: Path) -> None:
-    perception_dir = repo_root / "perception"
+    perception_dir = repo_root / "src" / "agrobot_perception"
     if str(perception_dir) not in sys.path:
         sys.path.insert(0, str(perception_dir))
 

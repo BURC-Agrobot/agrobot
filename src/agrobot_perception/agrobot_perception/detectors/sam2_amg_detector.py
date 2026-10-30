@@ -23,7 +23,7 @@ Sprint 4 improvements (vs Sprint 3 baseline mAP=0.170):
        without catastrophic forgetting. Load via dino_lora_path.
   E8 — MIGraphX inference: optional MIGraphX-compiled .mxr replaces the PyTorch
        DINOv2 forward (~350ms→~20ms on NucBox GPU). Load via migraphx_dino_path.
-       Blocked on ROCm gfx1151 — see docs/SPRINT3_ROCM_ISSUE.md.
+       Blocked on ROCm gfx1151.
 
 Scoring pipeline (per frame):
   1. SAM2 AMG generates N pixel-precise mask proposals from a uniform grid.
@@ -251,7 +251,7 @@ class SAM2AMGDetector:
         else:
             logger.warning(
                 "Query embedding not found at %s. "
-                "Run perception/tools/build_query_embedding.py first.",
+                "Run src/agrobot_perception/tools/build_query_embedding.py first.",
                 query_path,
             )
 

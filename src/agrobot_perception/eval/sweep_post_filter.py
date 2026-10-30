@@ -16,14 +16,14 @@ Replays the EXACT post-filter chain from sam2_amg_detector.detect():
   3. sort by score descending
   4. cap at max_detections
 
-Then compute mAP@0.5, precision, and recall with perception/eval/metrics.py.
+Then compute mAP@0.5, precision, and recall with src/agrobot_perception/eval/metrics.py.
 Live evaluation uses the same module.
 Results are therefore bit-identical to a complete inference rerun.
 
 Usage (from repository root):
   # Step 1: dump raw detections once (~50 min on NucBox CPU)
-  AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES="" PYTHONPATH=perception \\
-    python3 perception/eval/run_eval.py \\
+  AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES="" PYTHONPATH=src/agrobot_perception \\
+    python3 src/agrobot_perception/eval/run_eval.py \\
       --val-list data/val_list.txt --gt-csv data/val_gt.csv \\
       --detector sam2_amg --amg-points 28 \\
       --confidence 0.0 --nms-iou 0.0 --max-detections 1000 \\
@@ -34,7 +34,7 @@ Usage (from repository root):
       --detections-jsonl eval_reports/sweep_p1_1/raw_detections.jsonl
 
   # Step 2: sweep post-filter combinations (~30 sec)
-  PYTHONPATH=perception python3 perception/eval/sweep_post_filter.py \\
+  PYTHONPATH=src/agrobot_perception python3 src/agrobot_perception/eval/sweep_post_filter.py \\
       --detections-jsonl eval_reports/sweep_p1_1/raw_detections.jsonl \\
       --gt-csv data/val_gt.csv \\
       --confidence 0.20 0.25 0.30 0.35 0.40 \\
@@ -63,7 +63,7 @@ from agrobot_perception.utils.repo_root import find_repo_root
 
 
 def _setup_path(repo_root: Path) -> None:
-    perception_dir = repo_root / "perception"
+    perception_dir = repo_root / "src" / "agrobot_perception"
     if str(perception_dir) not in sys.path:
         sys.path.insert(0, str(perception_dir))
 

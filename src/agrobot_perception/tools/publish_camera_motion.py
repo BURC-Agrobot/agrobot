@@ -5,7 +5,7 @@ Publishes a single Vector3 to /agrobot/camera_motion so you can verify the
 tracker's motion-compensation path without the arm controller in the loop.
 
 Usage (after sourcing setup_env.sh):
-    python3 perception/tools/publish_camera_motion.py --dx 0.0 --dy 0.0 --dz 0.66
+    python3 src/agrobot_perception/tools/publish_camera_motion.py --dx 0.0 --dy 0.0 --dz 0.66
 
 The displacement is in CAMERA OPTICAL FRAME:
     +X = right in image

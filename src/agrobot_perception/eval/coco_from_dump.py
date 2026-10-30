@@ -6,7 +6,7 @@ apples-to-apples COCO AP numbers for configurations that were only dumped
 under legacy mAP (Phase 1.1 baseline).
 
 Usage:
-  PYTHONPATH=perception python3 perception/eval/coco_from_dump.py \\
+  PYTHONPATH=src/agrobot_perception python3 src/agrobot_perception/eval/coco_from_dump.py \\
     --detections-jsonl eval_reports/sweep_p1_1/raw_detections.jsonl \\
     --gt-csv data/val_gt.csv \\
     --confidence 0.35 --nms-iou 0.50 --max-detections 30
@@ -18,6 +18,7 @@ import argparse
 import os
 import sys
 from pathlib import Path
+from agrobot_perception.utils.repo_root import find_repo_root
 
 
 def main() -> None:
@@ -29,9 +30,9 @@ def main() -> None:
     parser.add_argument("--max-detections", type=int, required=True)
     args = parser.parse_args()
 
-    repo_root = Path(__file__).resolve().parent.parent.parent
+    repo_root = find_repo_root()
     os.chdir(repo_root)
-    sys.path.insert(0, str(repo_root / "perception"))
+    sys.path.insert(0, str(repo_root / "src" / "agrobot_perception"))
 
     from eval.sweep_post_filter import _apply_post_filter, _load_dumped_detections, _load_gt
     from eval.metrics_coco import compute_coco_metrics, format_coco_table
