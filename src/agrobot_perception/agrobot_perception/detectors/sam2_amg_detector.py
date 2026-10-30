@@ -60,6 +60,8 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
+from agrobot_perception.utils.repo_root import find_repo_root
+
 logger = logging.getLogger(__name__)
 
 _DINO_MODEL_NAME = "dinov2_vitb14"
@@ -83,13 +85,6 @@ def _select_device() -> torch.device:
     if torch.cuda.is_available():
         return torch.device("cuda")
     return torch.device("cpu")
-
-
-def _find_repo_root() -> Path:
-    env_root = os.environ.get("AGROBOT_ROOT")
-    if env_root:
-        return Path(env_root)
-    raise RuntimeError("Cannot find repo root. Set AGROBOT_ROOT.")
 
 
 class SAM2AMGDetector:
@@ -141,7 +136,7 @@ class SAM2AMGDetector:
         self._dino_score_weight = dino_score_weight
         self._nms_iou_threshold = nms_iou_threshold
         self._negative_weight = negative_weight
-        self._repo_root = _find_repo_root()
+        self._repo_root = find_repo_root()
 
         self._use_quadrant_crops = use_quadrant_crops
         self._crop_overlap = crop_overlap

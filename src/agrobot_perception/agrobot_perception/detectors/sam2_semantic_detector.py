@@ -55,6 +55,8 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
+from agrobot_perception.utils.repo_root import find_repo_root
+
 logger = logging.getLogger(__name__)
 
 _DINO_MODEL_NAME = "dinov2_vitb14"
@@ -78,13 +80,6 @@ def _select_device() -> torch.device:
     if torch.cuda.is_available():
         return torch.device("cuda")
     return torch.device("cpu")
-
-
-def _find_repo_root() -> Path:
-    env_root = os.environ.get("AGROBOT_ROOT")
-    if env_root:
-        return Path(env_root)
-    raise RuntimeError("Cannot find repo root. Set AGROBOT_ROOT.")
 
 
 class SAM2SemanticDetector:
@@ -148,7 +143,7 @@ class SAM2SemanticDetector:
         self._nms_before_decode = nms_before_decode
         self._dino_lora_path = Path(dino_lora_path) if dino_lora_path else None
         self._negative_embedding_path = Path(negative_embedding_path) if negative_embedding_path else None
-        self._repo_root = _find_repo_root()
+        self._repo_root = find_repo_root()
 
         ckpt = sam2_checkpoint or str(self._repo_root / _DEFAULT_SAM2_CKPT)
         self._sam2_ckpt = Path(ckpt)

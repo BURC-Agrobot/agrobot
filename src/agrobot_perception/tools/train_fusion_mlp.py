@@ -44,9 +44,7 @@ from torch.utils.data import DataLoader, TensorDataset
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-
-def _repo_root() -> Path:
-    return Path(__file__).resolve().parent.parent.parent
+from agrobot_perception.utils.repo_root import find_repo_root
 
 
 def _iou(b1, b2) -> float:
@@ -138,7 +136,7 @@ def main() -> None:
                         help="Fraction of dumped detections held out for early stopping.")
     args = parser.parse_args()
 
-    repo_root = _repo_root()
+    repo_root = find_repo_root()
     feat_path = args.features if args.features.is_absolute() else repo_root / args.features
     img_list = args.image_list if args.image_list.is_absolute() else repo_root / args.image_list
     gt_path = args.gt_csv if args.gt_csv.is_absolute() else repo_root / args.gt_csv

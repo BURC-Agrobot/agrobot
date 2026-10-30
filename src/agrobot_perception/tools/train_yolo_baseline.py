@@ -47,9 +47,7 @@ import yaml
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-
-def _repo_root() -> Path:
-    return Path(__file__).resolve().parent.parent.parent
+from agrobot_perception.utils.repo_root import find_repo_root
 
 
 def _write_dataset_yaml(repo_root: Path) -> Path:
@@ -122,7 +120,7 @@ def main() -> None:
                         help="cpu / 0 / mps. Use cpu on NucBox until ROCm unblocked.")
     args = parser.parse_args()
 
-    repo_root = _repo_root()
+    repo_root = find_repo_root()
     os.chdir(repo_root)
     yaml_path = _write_dataset_yaml(repo_root)
 

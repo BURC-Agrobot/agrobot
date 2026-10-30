@@ -28,17 +28,7 @@ import sys
 import time
 from pathlib import Path
 
-
-def _repo_root() -> Path:
-    root = Path(__file__).resolve().parent.parent.parent
-    if not (root / "perception" / "agrobot_perception").exists():
-        env_root = os.environ.get("AGROBOT_ROOT")
-        if env_root:
-            return Path(env_root)
-        raise RuntimeError(
-            "Cannot find repo root. Set AGROBOT_ROOT or run from AgrobotV2/."
-        )
-    return root
+from agrobot_perception.utils.repo_root import find_repo_root
 
 
 def _setup_path(repo_root: Path) -> None:
@@ -313,7 +303,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    repo_root = _repo_root()
+    repo_root = find_repo_root()
     _setup_path(repo_root)
     os.chdir(repo_root)
 

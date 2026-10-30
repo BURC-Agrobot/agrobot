@@ -59,6 +59,8 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
+from agrobot_perception.utils.repo_root import find_repo_root
+
 logger = logging.getLogger(__name__)
 
 # Path to SAM2 checkpoint relative to the repository root
@@ -108,16 +110,6 @@ def _select_device() -> torch.device:
     return torch.device("cpu")
 
 
-def _find_repo_root() -> Path:
-    """Read the repository root from AGROBOT_ROOT."""
-    env_root = os.environ.get("AGROBOT_ROOT")
-    if env_root:
-        return Path(env_root)
-    raise RuntimeError(
-        "Cannot find repo root. Set AGROBOT_ROOT env var."
-    )
-
-
 class DINOv2SAM2Detector:
     """Zero-shot tomato detector using DINOv2 patch similarity + SAM2 masking.
 
@@ -143,7 +135,7 @@ class DINOv2SAM2Detector:
         self._conf_threshold = confidence_threshold
         self._max_detections = max_detections
         self._use_sam2 = use_sam2
-        self._repo_root = _find_repo_root()
+        self._repo_root = find_repo_root()
 
         self._dino: Optional[torch.nn.Module] = None
         self._sam2_predictor = None

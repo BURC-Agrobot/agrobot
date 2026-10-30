@@ -63,9 +63,7 @@ import numpy as np
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-
-def _repo_root() -> Path:
-    return Path(__file__).resolve().parent.parent.parent
+from agrobot_perception.utils.repo_root import find_repo_root
 
 
 def _setup_path(repo_root: Path) -> None:
@@ -151,7 +149,7 @@ def main() -> None:
     parser.add_argument("--max-images", type=int, default=0)
     args = parser.parse_args()
 
-    repo_root = _repo_root()
+    repo_root = find_repo_root()
     _setup_path(repo_root)
     os.chdir(repo_root)
 
