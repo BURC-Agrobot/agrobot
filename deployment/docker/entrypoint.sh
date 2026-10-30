@@ -4,8 +4,8 @@
 # Stop startup if a required environment setup fails
 set -e
 
-# Source ROS 2 Jazzy environment
-source /opt/ros/jazzy/setup.bash
+# Source ROS 2 Lyrical environment
+source /opt/ros/lyrical/setup.bash
 
 # Add all local packages if the workspace build exists
 if [ -f /ros2_ws/install/setup.bash ]; then

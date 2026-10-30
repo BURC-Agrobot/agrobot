@@ -1,19 +1,19 @@
-# Use the pinned Jazzy base on Ubuntu Noble for this development machine
-FROM ros:jazzy-ros-base-noble@sha256:066420e07f60aa18262f2479981def87ebcfcec42eefb0c0c57c4a46098348ca
+# Use the pinned Lyrical base on Ubuntu Resolute for this development machine
+FROM ros:lyrical-ros-base-resolute@sha256:3224ee150cb02eb89a5e0811bc267b57ed3a91b9c10191df57810726a7e916d7
 
 # Install build checks and headless runtime dependencies without GPU ML packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential clang-tidy mypy python3-pytest \
     python3-colcon-common-extensions python3-numpy python3-opencv \
-    ros-jazzy-moveit-ros-move-group ros-jazzy-moveit-kinematics \
-    ros-jazzy-moveit-planners ros-jazzy-moveit-simple-controller-manager \
-    ros-jazzy-moveit-configs-utils ros-jazzy-controller-manager \
-    ros-jazzy-joint-state-broadcaster ros-jazzy-joint-trajectory-controller \
-    ros-jazzy-joint-state-publisher ros-jazzy-robot-state-publisher \
-    ros-jazzy-xacro ros-jazzy-cv-bridge ros-jazzy-image-transport \
-    ros-jazzy-vision-msgs ros-jazzy-sensor-msgs-py \
-    ros-jazzy-ament-copyright ros-jazzy-ament-flake8 ros-jazzy-ament-pep257 \
-    ros-jazzy-demo-nodes-cpp ros-jazzy-demo-nodes-py \
+    ros-lyrical-moveit-ros-move-group ros-lyrical-moveit-kinematics \
+    ros-lyrical-moveit-planners ros-lyrical-moveit-simple-controller-manager \
+    ros-lyrical-moveit-configs-utils ros-lyrical-controller-manager \
+    ros-lyrical-joint-state-broadcaster ros-lyrical-joint-trajectory-controller \
+    ros-lyrical-joint-state-publisher ros-lyrical-robot-state-publisher \
+    ros-lyrical-xacro ros-lyrical-cv-bridge ros-lyrical-image-transport \
+    ros-lyrical-vision-msgs ros-lyrical-sensor-msgs-py \
+    ros-lyrical-ament-copyright ros-lyrical-ament-flake8 ros-lyrical-ament-pep257 \
+    ros-lyrical-demo-nodes-cpp ros-lyrical-demo-nodes-py \
     && rm -rf /var/lib/apt/lists/*
 
 # Keep PyTorch separate from system Python while retaining ROS dependencies
@@ -26,7 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3-venv \
 
 # Expose PyTorch to interactive Python and system-Python ROS executables
 ENV PATH=/opt/venv/bin:${PATH}
-ENV PYTHONPATH=/opt/venv/lib/python3.12/site-packages
+ENV PYTHONPATH=/opt/venv/lib/python3.14/site-packages
 
 # Verify tensor operations during the build without fetching model weights
 RUN python -c "import torch; assert torch.__version__ == '2.9.1+cpu'; \
@@ -34,8 +34,8 @@ RUN python -c "import torch; assert torch.__version__ == '2.9.1+cpu'; \
 
 # Include visualization and controller inspection in the standard dev image
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ros-jazzy-rviz2 ros-jazzy-moveit-ros-visualization \
-    ros-jazzy-joint-state-publisher-gui ros-jazzy-ros2controlcli \
+    ros-lyrical-rviz2 ros-lyrical-moveit-ros-visualization \
+    ros-lyrical-joint-state-publisher-gui ros-lyrical-ros2controlcli \
     && rm -rf /var/lib/apt/lists/*
 
 # Reuse startup support for the workspace overlay built in Linux volumes

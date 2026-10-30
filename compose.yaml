@@ -3,7 +3,7 @@ name: agrobot-dev
 services:
   dev:
     # Build natively for this x86-64 Linux machine
-    image: agrobot:jazzy-amd64-dev
+    image: agrobot:lyrical-amd64-dev
     platform: linux/amd64
     build:
       context: .
