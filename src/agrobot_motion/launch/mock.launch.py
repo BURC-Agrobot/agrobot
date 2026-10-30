@@ -64,6 +64,8 @@ def generate_launch_description() -> LaunchDescription:
                     {
                         # Disable other execution paths to keep one motion owner
                         "allow_trajectory_execution": False,
+                        # Share the semantic model because RViz cannot load the robot without it
+                        "publish_robot_description_semantic": True,
                         "disable_capabilities": (
                             "move_group/MoveGroupExecuteTrajectoryAction "
                             "move_group/MoveGroupMoveAction "

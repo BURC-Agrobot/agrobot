@@ -65,19 +65,19 @@ cd agrobot
 
 ## Build
 
-Load the environment. Do this in every new terminal:
+Build all packages and load the environment into this terminal:
 
 ```bash
-source setup_env.sh
+source build.sh
 ```
 
-Build all packages:
+To build only some packages, add `colcon` options:
 
 ```bash
-colcon build
+source build.sh --packages-select agrobot_motion
 ```
 
-Load the environment again so the shell can find the packages you just built:
+In every new terminal, load the environment without rebuilding:
 
 ```bash
 source setup_env.sh
@@ -104,6 +104,8 @@ Start the mock robot in one terminal. Press Ctrl-C to stop it:
 ```bash
 ros2 launch agrobot_motion mock.launch.py
 ```
+
+Ctrl-Z only suspends a command. To stop it, run `fg` and press Ctrl-C.
 
 Open a second terminal in the repository and load the environment:
 
@@ -186,8 +188,10 @@ reason.
 ## Known problems
 
 - `move_group` segfaults when the mock stack stops.
-- MoveIt planning from RViz does not work yet, because the plugin does not
-  receive `robot_description_semantic`.
+- ROS commands can print `RTPS_TRANSPORT_SHM Error` or `A message was lost!!!`.
+  Both are harmless if the command still returns data.
+- RViz cannot execute plans in mock mode, because `mock.launch.py` disables
+  `move_group` execution. Use `move_joints` to move the robot.
 - `AGROBOT_ROOT` must be set before running tools or nodes that need it.
   `setup_env.sh` sets it.
 - This README does not cover perception launch files, which need model files
