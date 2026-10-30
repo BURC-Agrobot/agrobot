@@ -65,13 +65,14 @@ cd agrobot
 
 ## Build
 
-Build all packages and load the environment into this terminal:
+Build all packages, run the tests, and load the environment into this terminal:
 
 ```bash
 source build.sh
 ```
 
-To build only some packages, add `colcon` options:
+To build only some packages, add `colcon build` options. The tests still cover
+the whole workspace:
 
 ```bash
 source build.sh --packages-select agrobot_motion
@@ -85,7 +86,7 @@ source setup_env.sh
 
 ## Test
 
-Run the tests:
+`build.sh` already runs the tests. To run them again without rebuilding:
 
 ```bash
 colcon test
