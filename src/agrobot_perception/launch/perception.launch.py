@@ -133,7 +133,7 @@ def generate_launch_description() -> LaunchDescription:
     fusion_mlp_path_arg = DeclareLaunchArgument(
         "fusion_mlp_path",
         default_value="models/fusion_mlp.pt",
-        description="Path to trained FusionMLP weights (relative to /workspace).",
+        description="Path to trained FusionMLP weights (relative to AGROBOT_ROOT).",
     )
     mlp_conf_arg = DeclareLaunchArgument(
         "mlp_confidence_threshold",

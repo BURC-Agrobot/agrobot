@@ -235,7 +235,14 @@ class TomatoDetectorNode(Node):
             import os
             _mlp_path = self.get_parameter("fusion_mlp_path").value
             if not os.path.isabs(_mlp_path):
-                _mlp_path = os.path.join("/workspace", _mlp_path)
+                # Resolve relative weights from the repository root
+                _agrobot_root = os.environ.get("AGROBOT_ROOT")
+                # Refuse to guess a location when the root is unknown
+                if not _agrobot_root:
+                    raise RuntimeError(
+                        "AGROBOT_ROOT is not set. Run: source setup_env.sh"
+                    )
+                _mlp_path = os.path.join(_agrobot_root, _mlp_path)
             try:
                 from eval.siglip_rescoring import SigLIPRescoringWrapper
                 from eval.fusion_mlp import FusionMLPWrapper
