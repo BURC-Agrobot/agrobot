@@ -114,7 +114,7 @@ try:
 except ImportError:
     raise ImportError(
         "sensor_msgs_py not found. "
-        "Install it inside the container: apt-get install ros-jazzy-sensor-msgs-py"
+        "Install it inside the container: apt-get install ros-lyrical-sensor-msgs-py"
     )
 
 from agrobot_perception.utils.pointcloud_utils import (
