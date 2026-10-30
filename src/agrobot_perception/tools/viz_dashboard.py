@@ -77,8 +77,7 @@ try:
     from cv_bridge import CvBridge
 except ImportError as exc:
     raise ImportError(
-        "cv_bridge not found — run inside the ROS 2 Docker container:\n"
-        "  docker compose -f deployment/compose/docker-compose.yml run --rm dev bash"
+        "cv_bridge not found. Install ros-lyrical-cv-bridge and run: source setup_env.sh"
     ) from exc
 
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal

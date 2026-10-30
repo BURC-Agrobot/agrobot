@@ -83,8 +83,7 @@ try:
     from cv_bridge import CvBridge
 except ImportError:
     raise ImportError(
-        "cv_bridge not found. Are you running inside the ROS 2 Docker container? "
-        "Run: docker compose -f deployment/compose/docker-compose.yml run --rm dev bash"
+        "cv_bridge not found. Install ros-lyrical-cv-bridge and run: source setup_env.sh"
     )
 
 from agrobot_perception.utils.image_utils import (

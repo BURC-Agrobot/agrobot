@@ -105,8 +105,7 @@ try:
     from cv_bridge import CvBridge
 except ImportError:
     raise ImportError(
-        "cv_bridge not found. Are you running inside the ROS 2 Docker container? "
-        "Run: docker compose -f deployment/compose/docker-compose.yml run --rm dev bash"
+        "cv_bridge not found. Install ros-lyrical-cv-bridge and run: source setup_env.sh"
     )
 
 try:
@@ -114,7 +113,7 @@ try:
 except ImportError:
     raise ImportError(
         "sensor_msgs_py not found. "
-        "Install it inside the container: apt-get install ros-lyrical-sensor-msgs-py"
+        "Install it with: sudo apt-get install ros-lyrical-sensor-msgs-py"
     )
 
 from agrobot_perception.utils.pointcloud_utils import (
