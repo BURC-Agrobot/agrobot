@@ -34,15 +34,16 @@ target_include_directories(motion_rules PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 # Attach model and message dependencies needed by validation
-ament_target_dependencies(motion_rules
-  rclcpp controller_manager_msgs sensor_msgs trajectory_msgs moveit_core)
+target_link_libraries(motion_rules rclcpp::rclcpp ${controller_manager_msgs_TARGETS}
+  ${sensor_msgs_TARGETS} ${trajectory_msgs_TARGETS} moveit_core::moveit_robot_model)
 # Link generated action types into the validation library
 target_link_libraries(motion_rules "${typesupport}")
 
 # Build the executable that owns planning and mock execution
 add_executable(motion_node src/motion_node.cpp)
 # Attach action and planning dependencies to the motion node
-ament_target_dependencies(motion_node rclcpp_action control_msgs moveit_msgs moveit_ros_planning)
+target_link_libraries(motion_node rclcpp_action::rclcpp_action ${control_msgs_TARGETS}
+  ${moveit_msgs_TARGETS} moveit_ros_planning::moveit_robot_model_loader)
 # Link the shared validation rules into the motion executable
 target_link_libraries(motion_node motion_rules)
 
