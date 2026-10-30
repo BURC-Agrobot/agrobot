@@ -24,7 +24,8 @@ setup(
     maintainer_email="howardw1120@gmail.com",
     description="Agrobot TOM v2 perception pipeline",
     license="None",
-    tests_require=["pytest"],
+    # Declare pytest as a test extra so colcon runs tests with pytest
+    extras_require={"test": ["pytest"]},
     entry_points={
         "console_scripts": [
             # Format: "executable_name = package.module:main_function"
