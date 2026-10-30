@@ -48,7 +48,11 @@ def generate_launch_description() -> LaunchDescription:
             Node(
                 package="controller_manager",
                 executable="spawner",
-                arguments=["joint_state_broadcaster", "arm_controller", "rail_controller"],
+                arguments=[
+                    "joint_state_broadcaster", "arm_controller", "rail_controller",
+                    # Load joint settings because the manager no longer shares its file
+                    "--param-file", str(controllers_path),
+                ],
                 output="screen",
             ),
             # Provide collision-aware planning from the existing MoveIt setup
