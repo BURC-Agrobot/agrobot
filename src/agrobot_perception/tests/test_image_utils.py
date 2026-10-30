@@ -1,9 +1,8 @@
 """
 test_image_utils.py — Unit tests for agrobot_perception.utils.image_utils
 
-These tests run with `bazel test //perception:image_utils_test`.
-They do NOT require ROS 2 — only numpy and opencv, which Bazel
-provides hermetically from the pip lock file.
+These tests run with `colcon test`.
+They do NOT require ROS 2 — only numpy and opencv.
 
 Design principle: test the mathematical invariants of each function,
 not the implementation. If we swap cv2.resize for a GPU-accelerated

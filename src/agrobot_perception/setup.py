@@ -2,7 +2,6 @@ from setuptools import find_packages, setup
 
 # ament_python, the ROS 2 Python build type, requires setup.py
 # It tells colcon how to install this package into the ROS 2 workspace overlay
-# Bazel does NOT use this file — Bazel uses BUILD.bazel instead
 
 package_name = "agrobot_perception"
 

@@ -109,18 +109,12 @@ def _select_device() -> torch.device:
 
 
 def _find_repo_root() -> Path:
-    """Search this file’s parent directories to find the repository root (contains MODULE.bazel)."""
-    candidate = Path(__file__).resolve()
-    for _ in range(10):
-        candidate = candidate.parent
-        if (candidate / "MODULE.bazel").exists():
-            return candidate
-    # Otherwise, use AGROBOT_ROOT if set
+    """Read the repository root from AGROBOT_ROOT."""
     env_root = os.environ.get("AGROBOT_ROOT")
     if env_root:
         return Path(env_root)
     raise RuntimeError(
-        "Cannot find repo root. Set AGROBOT_ROOT env var or run from the repo."
+        "Cannot find repo root. Set AGROBOT_ROOT env var."
     )
 
 

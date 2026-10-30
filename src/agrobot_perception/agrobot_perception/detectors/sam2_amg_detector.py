@@ -86,15 +86,10 @@ def _select_device() -> torch.device:
 
 
 def _find_repo_root() -> Path:
-    candidate = Path(__file__).resolve()
-    for _ in range(10):
-        candidate = candidate.parent
-        if (candidate / "MODULE.bazel").exists():
-            return candidate
     env_root = os.environ.get("AGROBOT_ROOT")
     if env_root:
         return Path(env_root)
-    raise RuntimeError("Cannot find repo root. Set AGROBOT_ROOT or run from the repo.")
+    raise RuntimeError("Cannot find repo root. Set AGROBOT_ROOT.")
 
 
 class SAM2AMGDetector:

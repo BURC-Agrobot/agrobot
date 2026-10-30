@@ -8,9 +8,6 @@
     - colcon determines build order and package type
     - ros2 pkg inspects packages (`ros2 pkg list`, `ros2 pkg executables`)
     - rqt discovers plugins
-
-  BUILD.bazel describes the same package for Bazel.
-  The manifests serve different toolchains without conflict
 -->
 <package format="3">
   <name>agrobot_perception</name>
