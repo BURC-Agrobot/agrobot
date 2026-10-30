@@ -74,7 +74,6 @@ from vision_msgs.msg import (
     Detection3D,
     ObjectHypothesisWithPose,
 )
-from geometry_msgs.msg import Point
 
 import cv2
 import numpy as np

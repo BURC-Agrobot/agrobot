@@ -11,7 +11,6 @@ version in Sprint 3, these tests should still pass unchanged.
 """
 
 import numpy as np
-import pytest
 
 from agrobot_perception.utils.image_utils import (
     bgr_to_rgb,

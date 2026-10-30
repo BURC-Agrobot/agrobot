@@ -1029,7 +1029,6 @@ class MainWindow(QMainWindow):
         with self._node._lock:
             d_frame = self._node._debug_frame
             r_frame = self._node._raw_frame
-            d_ts    = self._node._debug_ts
             dets    = list(self._node._detections)
             tracks  = list(self._node._tracks)
             picked  = set(self._node._picked_ids)
@@ -1042,8 +1041,6 @@ class MainWindow(QMainWindow):
                 p for p in self._node._vlm_votes
                 if self._node._verdict_for(p) == "imposter"
             }
-
-        now = time.monotonic()
 
         # Prefer raw_frame to avoid a second, misaligned box overlay
         # The detector draws debug_frame boxes in 518×518 coordinates
@@ -1273,7 +1270,6 @@ class MainWindow(QMainWindow):
             picked     = set(self._node._picked_ids)
             lost_count = self._node._lost_count
             health     = dict(self._node._health)
-            vlm_id     = self._node._vlm_id
             vlm_reason = self._node._vlm_reason
             vlm_history = list(self._node._vlm_history)
             vlm_history_gen = self._node._vlm_history_gen
@@ -1579,7 +1575,7 @@ class MainWindow(QMainWindow):
 
         self._popup_stats_lbl = QLabel("")
         self._popup_stats_lbl.setFont(QFont("Monospace", 8))
-        self._popup_stats_lbl.setStyleSheet(f"color:#aaa;border:none;")
+        self._popup_stats_lbl.setStyleSheet("color:#aaa;border:none;")
         outer.addWidget(self._popup_stats_lbl)
 
         outer.addWidget(self._sep())

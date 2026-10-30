@@ -91,12 +91,10 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import math
 import os
 import random
 import sys
 from pathlib import Path
-from typing import Optional
 
 import cv2
 import numpy as np
