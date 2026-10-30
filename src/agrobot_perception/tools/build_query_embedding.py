@@ -20,7 +20,7 @@ Usage (from repository root):
     --train-labels data/Laboro-Tomato/train/labels \
     --output models/query_embedding.pt
 
-  # [NUCBOX] inside ROCm container
+  # [NUCBOX] with ROCm
   AGROBOT_FORCE_CPU=1 HIP_VISIBLE_DEVICES="" PYTHONPATH=perception \
     python3 perception/tools/build_query_embedding.py \
     --train-images data/Laboro-Tomato/train/images \

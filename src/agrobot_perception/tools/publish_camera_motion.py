@@ -4,7 +4,7 @@ publish_camera_motion.py — Test helper for /agrobot/camera_motion
 Publishes a single Vector3 to /agrobot/camera_motion so you can verify the
 tracker's motion-compensation path without the arm controller in the loop.
 
-Usage (inside the ROS container, ROS_DOMAIN_ID=42):
+Usage (after sourcing setup_env.sh):
     python3 perception/tools/publish_camera_motion.py --dx 0.0 --dy 0.0 --dz 0.66
 
 The displacement is in CAMERA OPTICAL FRAME:

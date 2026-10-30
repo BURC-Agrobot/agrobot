@@ -16,7 +16,7 @@ All 11 ROS callbacks write to state dictionaries and deques under threading.Lock
 Four QTimers on the Qt main thread read that state.
 ROS callbacks never call Qt.
 
-Target environment: [NUCBOX] — run inside the ROCm Docker container with a
+Target environment: [NUCBOX] — run with ROCm and a
 live pipeline (detector → spatial → tracker → qwen_vl) already publishing.
 Requires an X11 display:
   SSH with X11:  ssh -X <user>@<nucbox_ip>   # then run the command below

@@ -2,7 +2,7 @@
 test_image_utils.py — Unit tests for agrobot_perception.utils.image_utils
 
 These tests run with `bazel test //perception:image_utils_test`.
-They do NOT require ROS 2 or Docker — only numpy and opencv, which Bazel
+They do NOT require ROS 2 — only numpy and opencv, which Bazel
 provides hermetically from the pip lock file.
 
 Design principle: test the mathematical invariants of each function,

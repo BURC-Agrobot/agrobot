@@ -4,7 +4,7 @@ perception.launch.py — Launch file for the Agrobot perception stack.
 ROS 2 launch files are Python scripts. They describe which nodes to start,
 with what parameters, remappings, and in what namespace.
 
-Run inside the container:
+Run after sourcing setup_env.sh:
     ros2 launch agrobot_perception perception.launch.py
     ros2 launch agrobot_perception perception.launch.py confidence_threshold:=0.3
 

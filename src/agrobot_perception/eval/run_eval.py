@@ -10,8 +10,8 @@ Usage (from repository root):
   PYTHONPATH=perception python perception/eval/run_eval.py --val-list data/val_list.txt --gt-csv data/val_gt.csv
   PYTHONPATH=perception python perception/eval/run_eval.py --val-list data/val_list.txt --detector dino_only
 
-Inside Docker:
-  cd /workspace && PYTHONPATH=perception python perception/eval/run_eval.py --val-list data/val_list.txt
+From the repository root:
+  PYTHONPATH=perception python perception/eval/run_eval.py --val-list data/val_list.txt
 
 With visualizations (HTML report + annotated images):
   ... --visualize-dir eval_reports/run_001

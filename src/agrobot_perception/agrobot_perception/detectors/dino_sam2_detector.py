@@ -32,8 +32,7 @@ Zero-shot detection pipeline (no tomato-specific training required):
 
 Device strategy
 ---------------
-  Precedence: MPS (Mac host, outside Docker) → CUDA → CPU
-  Inside Docker on Mac: always CPU (MPS does not pass through the Linux VM).
+  Precedence: MPS (Mac host) → CUDA → CPU
   Sprint 3 adds: ROCm via HSA_OVERRIDE_GFX_VERSION=11.5.1 on AMD edge.
 
 Model weights
@@ -64,7 +63,6 @@ logger = logging.getLogger(__name__)
 
 # Path to SAM2 checkpoint relative to the repository root
 # At runtime, use AGROBOT_ROOT to resolve the path
-# Otherwise, use a path relative to this file in the mounted container
 _DEFAULT_SAM2_CKPT = "models/sam2/sam2.1_hiera_small.pt"
 # Config path is relative to the sam2 package root (not the repository root)
 # build_sam2() resolves this via Hydra's pkg://sam2 search path
@@ -94,8 +92,7 @@ _TOMATO_RGB_PRIOR = np.array([
 def _select_device() -> torch.device:
     """Select the best available inference device.
 
-    Check MPS first so runs on the Mac host, outside Docker, use the GPU.
-    In a Docker container on Mac, MPS is unavailable. Use the CPU there.
+    Check MPS first so runs on a Mac host use the GPU.
 
     Set AGROBOT_FORCE_CPU=1 to bypass GPU selection entirely.
     NucBox (gfx1151/Strix Halo) requires this setting until Sprint 3 supplies
@@ -119,7 +116,6 @@ def _find_repo_root() -> Path:
         if (candidate / "MODULE.bazel").exists():
             return candidate
     # Otherwise, use AGROBOT_ROOT if set
-    # This value is always correct inside Docker
     env_root = os.environ.get("AGROBOT_ROOT")
     if env_root:
         return Path(env_root)
