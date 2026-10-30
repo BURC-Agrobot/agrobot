@@ -1,7 +1,0 @@
-# Send only the runtime recipe inputs to Docker
-**
-!deployment/
-!deployment/docker/
-!deployment/docker/Dockerfile.dev
-
-!deployment/docker/entrypoint.sh
