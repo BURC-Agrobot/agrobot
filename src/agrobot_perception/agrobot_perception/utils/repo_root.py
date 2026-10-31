@@ -1,6 +1,7 @@
 """Locate the repository so tools and nodes can find models and data."""
 
 import os
+import sys
 from pathlib import Path
 
 
@@ -16,3 +17,10 @@ def find_repo_root() -> Path:
     if not root.is_dir():
         raise RuntimeError(f"AGROBOT_ROOT is not a directory: {root}")
     return root
+
+
+# Let scripts import the eval and tools folders, which are not installed
+def add_perception_source_to_path(repo_root: Path) -> None:
+    perception_dir = repo_root / "src" / "agrobot_perception"
+    if str(perception_dir) not in sys.path:
+        sys.path.insert(0, str(perception_dir))

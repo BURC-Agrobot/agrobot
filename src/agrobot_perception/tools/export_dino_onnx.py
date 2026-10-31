@@ -65,6 +65,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from agrobot_perception.utils.repo_root import find_repo_root
+from agrobot_perception.utils.device import select_device
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -74,16 +75,6 @@ _INPUT_SIZE = 518     # Must be a multiple of patch_size=14: 518 = 37 * 14
 _EMBED_DIM  = 768     # ViT-B embedding dimension
 _N_PATCHES  = 37 * 37  # 1369 patch tokens per frame
 _OPSET      = 17
-
-
-def _select_device() -> torch.device:
-    if os.environ.get("AGROBOT_FORCE_CPU", "0") == "1":
-        return torch.device("cpu")
-    if torch.backends.mps.is_available():
-        return torch.device("mps")
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    return torch.device("cpu")
 
 
 class DINOv2PatchExtractor(torch.nn.Module):
@@ -230,7 +221,7 @@ def main() -> None:
     os.chdir(repo_root)
 
     output = args.output if args.output.is_absolute() else repo_root / args.output
-    device = _select_device()
+    device = select_device()
     logger.info("Device: %s", device)
 
     export(output, device, fixed_batch=args.fixed_batch)

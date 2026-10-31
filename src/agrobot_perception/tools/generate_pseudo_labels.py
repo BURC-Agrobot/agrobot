@@ -54,7 +54,6 @@ import argparse
 import json
 import logging
 import os
-import sys
 from pathlib import Path
 
 import cv2
@@ -63,24 +62,8 @@ import numpy as np
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-from agrobot_perception.utils.repo_root import find_repo_root
-
-
-def _setup_path(repo_root: Path) -> None:
-    perception_dir = repo_root / "src" / "agrobot_perception"
-    if str(perception_dir) not in sys.path:
-        sys.path.insert(0, str(perception_dir))
-
-
-def _select_device():
-    import torch
-    if os.environ.get("AGROBOT_FORCE_CPU", "0") == "1":
-        return torch.device("cpu")
-    if torch.backends.mps.is_available():
-        return torch.device("mps")
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    return torch.device("cpu")
+from agrobot_perception.utils.repo_root import add_perception_source_to_path, find_repo_root
+from agrobot_perception.utils.device import select_device
 
 
 def _mask_to_polygon(mask: np.ndarray) -> list[float] | None:
@@ -150,7 +133,7 @@ def main() -> None:
     args = parser.parse_args()
 
     repo_root = find_repo_root()
-    _setup_path(repo_root)
+    add_perception_source_to_path(repo_root)
     os.chdir(repo_root)
 
     from agrobot_perception.utils.image_utils import preprocess_for_dino
@@ -162,7 +145,7 @@ def main() -> None:
         return str(p if p.is_absolute() else repo_root / p)
 
     detector = SAM2AMGDetector(
-        device=_select_device(),
+        device=select_device(),
         sam2_checkpoint=_abs_str(args.sam2_checkpoint),
         confidence_threshold=args.confidence,
         max_detections=args.max_detections,

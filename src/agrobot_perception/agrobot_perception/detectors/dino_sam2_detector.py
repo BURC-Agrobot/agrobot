@@ -50,7 +50,6 @@ Swap point
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 from typing import Optional
 
@@ -60,6 +59,7 @@ import torch
 import torch.nn.functional as F
 
 from agrobot_perception.utils.repo_root import find_repo_root
+from agrobot_perception.utils.device import select_device
 
 logger = logging.getLogger(__name__)
 
@@ -91,25 +91,6 @@ _TOMATO_RGB_PRIOR = np.array([
 ], dtype=np.float32) / 255.0  # normalise to [0, 1]
 
 
-def _select_device() -> torch.device:
-    """Select the best available inference device.
-
-    Check MPS first so runs on a Mac host use the GPU.
-
-    Set AGROBOT_FORCE_CPU=1 to bypass GPU selection entirely.
-    NucBox (gfx1151/Strix Halo) requires this setting until Sprint 3 supplies
-    the MIGraphX path. The prebuilt ROCm 6.4 PyTorch wheels target discrete
-    RDNA 3 (gfx1100). They fault on gfx1151 unified memory.
-    """
-    if os.environ.get("AGROBOT_FORCE_CPU", "0") == "1":
-        return torch.device("cpu")
-    if torch.backends.mps.is_available():
-        return torch.device("mps")
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    return torch.device("cpu")
-
-
 class DINOv2SAM2Detector:
     """Zero-shot tomato detector using DINOv2 patch similarity + SAM2 masking.
 
@@ -131,7 +112,7 @@ class DINOv2SAM2Detector:
         max_detections: int = 20,
         use_sam2: bool = True,
     ) -> None:
-        self._device = device or _select_device()
+        self._device = device or select_device()
         self._conf_threshold = confidence_threshold
         self._max_detections = max_detections
         self._use_sam2 = use_sam2

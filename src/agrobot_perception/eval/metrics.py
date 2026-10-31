@@ -4,17 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
-def _iou_box(box1: tuple[float, float, float, float], box2: tuple[float, float, float, float]) -> float:
-    x1 = max(box1[0], box2[0])
-    y1 = max(box1[1], box2[1])
-    x2 = min(box1[2], box2[2])
-    y2 = min(box1[3], box2[3])
-    inter = max(0, x2 - x1) * max(0, y2 - y1)
-    a1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
-    a2 = (box2[2] - box2[0]) * (box2[3] - box2[1])
-    union = a1 + a2 - inter
-    return inter / union if union > 0 else 0.0
+from agrobot_perception.utils.box_utils import box_iou
 
 
 def compute_ap_iou_threshold(
@@ -59,7 +49,7 @@ def compute_ap_iou_threshold(
             for j, gt in enumerate(gt_boxes):
                 if gt_matched[j]:
                     continue
-                iou = _iou_box(
+                iou = box_iou(
                     (float(box[0]), float(box[1]), float(box[2]), float(box[3])),
                     gt,
                 )

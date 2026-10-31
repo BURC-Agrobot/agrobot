@@ -45,26 +45,14 @@ from typing import Optional
 import numpy as np
 import torch
 import torch.nn.functional as F
+from agrobot_perception.utils.box_utils import box_iou
+from agrobot_perception.utils.image_utils import denormalize_imagenet
 
 logger = logging.getLogger(__name__)
 
-_IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
-_IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 _DINO_PATCH_SIZE = 14
 _DINO_INPUT_SIZE = 518
 _DINO_GRID = _DINO_INPUT_SIZE // _DINO_PATCH_SIZE  # 37
-
-
-def _box_iou(b1, b2) -> float:
-    x1 = max(b1[0], b2[0])
-    y1 = max(b1[1], b2[1])
-    x2 = min(b1[2], b2[2])
-    y2 = min(b1[3], b2[3])
-    inter = max(0.0, x2 - x1) * max(0.0, y2 - y1)
-    a1 = (b1[2] - b1[0]) * (b1[3] - b1[1])
-    a2 = (b2[2] - b2[0]) * (b2[3] - b2[1])
-    union = a1 + a2 - inter
-    return inter / union if union > 0 else 0.0
 
 
 def _mask_to_patch_coverage(seg: np.ndarray) -> torch.Tensor:
@@ -110,14 +98,6 @@ class MaskRefineWrapper:
                     f"MaskRefineWrapper requires a SAM2AMGDetector-like base; "
                     f"missing attribute {attr!r}."
                 )
-
-    def _reconstruct_rgb(self, preprocessed_chw: np.ndarray) -> np.ndarray:
-        rgb_float = (
-            preprocessed_chw * _IMAGENET_STD[:, None, None]
-            + _IMAGENET_MEAN[:, None, None]
-        )
-        rgb_uint8 = (np.clip(rgb_float, 0, 1) * 255).astype(np.uint8)
-        return np.transpose(rgb_uint8, (1, 2, 0))
 
     def _dino_forward(self, preprocessed_chw: np.ndarray) -> torch.Tensor:
         """Run DINOv2 once. Reuse cached patch_norms for all refinements."""
@@ -195,7 +175,7 @@ class MaskRefineWrapper:
         new_box = [float(cols[0]), float(rows[0]), float(cols[-1]), float(rows[-1])]
 
         # IoU vs original — don't accept refinements that drift to a different object
-        iou = _box_iou(new_box, [x1, y1, x2, y2])
+        iou = box_iou(new_box, [x1, y1, x2, y2])
         if iou < self._min_iou:
             return None
 
@@ -232,7 +212,7 @@ class MaskRefineWrapper:
             logger.warning("Inner detector has no SAM2 predictor; refinement skipped.")
             return dets
 
-        rgb_hwc = self._reconstruct_rgb(preprocessed_chw)
+        rgb_hwc = denormalize_imagenet(preprocessed_chw)
         try:
             predictor.set_image(rgb_hwc)
         except Exception as exc:

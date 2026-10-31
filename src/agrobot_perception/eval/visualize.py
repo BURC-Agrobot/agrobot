@@ -12,6 +12,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+from agrobot_perception.utils.box_utils import box_iou
 
 
 _INPUT_SIZE = 518
@@ -22,21 +23,6 @@ _BOX_THICKNESS = 2
 _FONT = cv2.FONT_HERSHEY_SIMPLEX
 _FONT_SCALE = 0.45
 _FONT_THICKNESS = 1
-
-
-def _iou_box(
-    box1: tuple[float, float, float, float],
-    box2: tuple[float, float, float, float],
-) -> float:
-    x1 = max(box1[0], box2[0])
-    y1 = max(box1[1], box2[1])
-    x2 = min(box1[2], box2[2])
-    y2 = min(box1[3], box2[3])
-    inter = max(0, x2 - x1) * max(0, y2 - y1)
-    a1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
-    a2 = (box2[2] - box2[0]) * (box2[3] - box2[1])
-    union = a1 + a2 - inter
-    return inter / union if union > 0 else 0.0
 
 
 def _match_detections_to_gt(
@@ -55,7 +41,7 @@ def _match_detections_to_gt(
         for j, gt in enumerate(gt_boxes):
             if gt_matched[j]:
                 continue
-            iou = _iou_box(box, gt)
+            iou = box_iou(box, gt)
             if iou > best_iou:
                 best_iou = iou
                 best_j = j

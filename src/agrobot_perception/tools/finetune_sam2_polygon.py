@@ -55,6 +55,7 @@ import torch.nn.functional as F
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 from agrobot_perception.utils.repo_root import find_repo_root
+from agrobot_perception.utils.device import select_device
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -62,16 +63,6 @@ logger = logging.getLogger(__name__)
 _INPUT_SIZE = 518
 _IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 _IMAGENET_STD  = np.array([0.229, 0.224, 0.225], dtype=np.float32)
-
-
-def _select_device() -> torch.device:
-    if os.environ.get("AGROBOT_FORCE_CPU", "0") == "1":
-        return torch.device("cpu")
-    if torch.backends.mps.is_available():
-        return torch.device("mps")
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    return torch.device("cpu")
 
 
 def load_coco_annotations(
@@ -179,7 +170,6 @@ def _polygon_to_518_mask(
     if mask.sum() < 4:
         return None
     return mask
-
 
 
 def _sample_interior_points(
@@ -487,7 +477,7 @@ def main() -> None:
             logger.error("%s not found: %s", name, p)
             sys.exit(1)
 
-    device = _select_device()
+    device = select_device()
     logger.info("Device: %s", device)
 
     records = load_coco_annotations(coco_json, train_images, max_images=args.max_images)

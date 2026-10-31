@@ -39,11 +39,11 @@ from typing import Optional, Protocol
 import numpy as np
 import torch
 import torch.nn.functional as F
+from agrobot_perception.utils.device import select_device
+from agrobot_perception.utils.image_utils import denormalize_imagenet
 
 logger = logging.getLogger(__name__)
 
-_IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
-_IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
 # Defaults match the plan's prompt set. Override per-call via the constructor
 _DEFAULT_POSITIVE_PROMPTS = (
@@ -62,17 +62,6 @@ _DEFAULT_MODEL_ID = "google/siglip-base-patch16-224"
 
 class _DetectorLike(Protocol):
     def detect(self, preprocessed_chw: np.ndarray) -> list[dict]: ...
-
-
-def _select_device() -> torch.device:
-    import os
-    if os.environ.get("AGROBOT_FORCE_CPU", "0") == "1":
-        return torch.device("cpu")
-    if torch.backends.mps.is_available():
-        return torch.device("mps")
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    return torch.device("cpu")
 
 
 def _as_tensor(x):
@@ -98,7 +87,7 @@ def _as_tensor(x):
 
 
 def _box_nms(detections: list[dict], iou_threshold: float) -> list[dict]:
-    """Same call signature as sam2_amg_detector._nms for bit-identical behaviour."""
+    """Same call signature as box_utils.nms_detections for bit-identical behaviour."""
     import cv2
     if len(detections) <= 1 or iou_threshold <= 0:
         return detections
@@ -172,7 +161,7 @@ class SigLIPRescoringWrapper:
         self._max_detections = max_detections
         self._conf_threshold = confidence_threshold
         self._min_crop_px = min_crop_px
-        self._device = device or _select_device()
+        self._device = device or select_device()
         self._positive_prompts = positive_prompts
         self._negative_prompts = negative_prompts
 
@@ -198,15 +187,6 @@ class SigLIPRescoringWrapper:
             "SigLIP cached %d positive + %d negative text embeddings (D=%d).",
             self._n_pos, self._n_neg, self._text_emb.shape[1],
         )
-
-    def _reconstruct_rgb(self, preprocessed_chw: np.ndarray) -> np.ndarray:
-        """Invert the ImageNet normalisation to get a uint8 HWC RGB image."""
-        rgb_float = (
-            preprocessed_chw * _IMAGENET_STD[:, None, None]
-            + _IMAGENET_MEAN[:, None, None]
-        )
-        rgb_uint8 = (np.clip(rgb_float, 0, 1) * 255).astype(np.uint8)
-        return np.transpose(rgb_uint8, (1, 2, 0))  # CHW -> HWC
 
     def _siglip_scores(
         self,
@@ -269,7 +249,7 @@ class SigLIPRescoringWrapper:
                 d.setdefault("dino_sim", float(d["score"]))
                 d.setdefault("pred_iou", 0.0)
 
-        rgb_hwc = self._reconstruct_rgb(preprocessed_chw)
+        rgb_hwc = denormalize_imagenet(preprocessed_chw)
         boxes = [list(d["box"]) for d in dets]
         siglip_sims = self._siglip_scores(rgb_hwc, boxes)
 

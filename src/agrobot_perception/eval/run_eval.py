@@ -28,13 +28,8 @@ import sys
 import time
 from pathlib import Path
 
-from agrobot_perception.utils.repo_root import find_repo_root
-
-
-def _setup_path(repo_root: Path) -> None:
-    perception_dir = repo_root / "src" / "agrobot_perception"
-    if str(perception_dir) not in sys.path:
-        sys.path.insert(0, str(perception_dir))
+from agrobot_perception.utils.repo_root import add_perception_source_to_path, find_repo_root
+from agrobot_perception.utils.device import select_device
 
 
 def main() -> None:
@@ -304,21 +299,11 @@ def main() -> None:
     args = parser.parse_args()
 
     repo_root = find_repo_root()
-    _setup_path(repo_root)
+    add_perception_source_to_path(repo_root)
     os.chdir(repo_root)
 
     from agrobot_perception.utils.image_utils import preprocess_for_dino
     import cv2
-
-    def _select_device():
-        import os as _os, torch as _torch
-        if _os.environ.get("AGROBOT_FORCE_CPU", "0") == "1":
-            return _torch.device("cpu")
-        if _torch.backends.mps.is_available():
-            return _torch.device("mps")
-        if _torch.cuda.is_available():
-            return _torch.device("cuda")
-        return _torch.device("cpu")
 
     # Build val image paths
 
@@ -361,7 +346,7 @@ def main() -> None:
     if args.detector == "sam2_amg":
         from agrobot_perception.detectors.sam2_amg_detector import SAM2AMGDetector
         detector = SAM2AMGDetector(
-            device=_select_device(),
+            device=select_device(),
             sam2_checkpoint=sam2_ckpt,
             confidence_threshold=args.confidence,
             max_detections=args.max_detections,
@@ -378,7 +363,7 @@ def main() -> None:
     elif args.detector == "sam2_semantic":
         from agrobot_perception.detectors.sam2_semantic_detector import SAM2SemanticDetector
         detector = SAM2SemanticDetector(
-            device=_select_device(),
+            device=select_device(),
             sam2_checkpoint=sam2_ckpt,
             confidence_threshold=args.confidence,
             max_detections=args.max_detections,
@@ -395,7 +380,7 @@ def main() -> None:
         from agrobot_perception.detectors.dino_sam2_detector import DINOv2SAM2Detector
         use_sam2 = args.detector == "dino_sam2"
         detector = DINOv2SAM2Detector(
-            device=_select_device(),
+            device=select_device(),
             confidence_threshold=args.confidence,
             sam2_checkpoint=sam2_ckpt,
             use_sam2=use_sam2,

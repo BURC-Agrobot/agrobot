@@ -46,16 +46,16 @@ Sprint 4: E3 semantic point sampling.
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 from typing import Optional
 
-import cv2
 import numpy as np
 import torch
 import torch.nn.functional as F
 
 from agrobot_perception.utils.repo_root import find_repo_root
+from agrobot_perception.utils.device import select_device
+from agrobot_perception.utils.box_utils import nms_detections
 
 logger = logging.getLogger(__name__)
 
@@ -70,16 +70,6 @@ _DEFAULT_NEGATIVE_EMB = "models/negative_embedding.pt"
 
 _IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 _IMAGENET_STD  = np.array([0.229, 0.224, 0.225], dtype=np.float32)
-
-
-def _select_device() -> torch.device:
-    if os.environ.get("AGROBOT_FORCE_CPU", "0") == "1":
-        return torch.device("cpu")
-    if torch.backends.mps.is_available():
-        return torch.device("mps")
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    return torch.device("cpu")
 
 
 class SAM2SemanticDetector:
@@ -130,7 +120,7 @@ class SAM2SemanticDetector:
         dino_lora_path: Optional[str] = None,
         negative_embedding_path: Optional[str] = None,
     ) -> None:
-        self._device = device or _select_device()
+        self._device = device or select_device()
         self._conf_threshold = confidence_threshold
         self._max_detections = max_detections
         self._top_k_semantic = top_k_semantic
@@ -427,27 +417,8 @@ class SAM2SemanticDetector:
 
         # Step 7: NMS
         if self._nms_iou_threshold > 0 and detections:
-            detections = self._nms(detections)
+            detections = nms_detections(detections, self._nms_iou_threshold)
 
         detections.sort(key=lambda d: d["score"], reverse=True)
         return detections[: self._max_detections]
 
-    def _nms(self, detections: list[dict]) -> list[dict]:
-        """Box NMS — identical to SAM2AMGDetector._nms."""
-        if len(detections) <= 1:
-            return detections
-        boxes  = np.array([d["box"] for d in detections], dtype=np.float32)
-        scores = np.array([d["score"] for d in detections], dtype=np.float32)
-        xywh = np.zeros_like(boxes)
-        xywh[:, 0] = boxes[:, 0]
-        xywh[:, 1] = boxes[:, 1]
-        xywh[:, 2] = boxes[:, 2] - boxes[:, 0]
-        xywh[:, 3] = boxes[:, 3] - boxes[:, 1]
-        indices = cv2.dnn.NMSBoxes(
-            xywh.tolist(), scores.tolist(),
-            score_threshold=0.0, nms_threshold=self._nms_iou_threshold,
-        )
-        if len(indices) == 0:
-            return detections
-        kept = np.asarray(indices).flatten()
-        return [detections[int(i)] for i in kept]

@@ -46,6 +46,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from agrobot_perception.utils.repo_root import find_repo_root
+from agrobot_perception.utils.device import select_device
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -57,16 +58,6 @@ _DINO_GRID = _DINO_INPUT_SIZE // _DINO_PATCH_SIZE  # 37
 
 _IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 _IMAGENET_STD  = np.array([0.229, 0.224, 0.225], dtype=np.float32)
-
-
-def _select_device() -> torch.device:
-    if os.environ.get("AGROBOT_FORCE_CPU", "0") == "1":
-        return torch.device("cpu")
-    if torch.backends.mps.is_available():
-        return torch.device("mps")
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    return torch.device("cpu")
 
 
 def _preprocess(bgr: np.ndarray) -> torch.Tensor:
@@ -193,12 +184,9 @@ def _load_dino_with_lora(device: torch.device, lora_path: Optional[Path] = None)
     """
     dino = torch.hub.load("facebookresearch/dinov2", _DINO_MODEL_NAME, pretrained=True)
     if lora_path is not None and lora_path.exists():
-        try:
-            from perception.tools.finetune_dino_lora import inject_lora
-        except ImportError:
-            # Fallback path when running from repository root
-            sys.path.insert(0, str(Path(__file__).resolve().parent))
-            from finetune_dino_lora import inject_lora  # type: ignore[import]
+        # Find the sibling script, because the tools folder is not an installed package
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from finetune_dino_lora import inject_lora  # type: ignore[import]
 
         # Default to rank=8, lora_blocks=4 matching the training defaults
         # If you trained with different values, pass them via CLI in the future
@@ -222,7 +210,7 @@ def build_embedding(
     num_prototypes: int = 1,
     lora_path: Optional[Path] = None,
 ) -> None:
-    device = _select_device()
+    device = select_device()
     logger.info("Device: %s", device)
 
     logger.info("Loading DINOv2 (%s) via torch.hub...", _DINO_MODEL_NAME)

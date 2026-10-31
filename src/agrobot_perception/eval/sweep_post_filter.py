@@ -56,37 +56,15 @@ import os
 import sys
 from pathlib import Path
 
-import cv2
-import numpy as np
-
-from agrobot_perception.utils.repo_root import find_repo_root
-
-
-def _setup_path(repo_root: Path) -> None:
-    perception_dir = repo_root / "src" / "agrobot_perception"
-    if str(perception_dir) not in sys.path:
-        sys.path.insert(0, str(perception_dir))
+from agrobot_perception.utils.repo_root import add_perception_source_to_path, find_repo_root
+from agrobot_perception.utils.box_utils import nms_detections
 
 
 def _nms(detections: list[dict], nms_iou_threshold: float) -> list[dict]:
-    """Replay sam2_amg_detector._nms exactly: cv2.dnn.NMSBoxes with score_threshold=0."""
-    if len(detections) <= 1 or nms_iou_threshold <= 0:
+    """Replay the detectors' NMS, treating a threshold of 0 as turned off."""
+    if nms_iou_threshold <= 0:
         return detections
-    boxes = np.array([d["box"] for d in detections], dtype=np.float32)
-    scores = np.array([d["score"] for d in detections], dtype=np.float32)
-    xywh = np.zeros_like(boxes)
-    xywh[:, 0] = boxes[:, 0]
-    xywh[:, 1] = boxes[:, 1]
-    xywh[:, 2] = boxes[:, 2] - boxes[:, 0]
-    xywh[:, 3] = boxes[:, 3] - boxes[:, 1]
-    indices = cv2.dnn.NMSBoxes(
-        xywh.tolist(), scores.tolist(),
-        score_threshold=0.0, nms_threshold=nms_iou_threshold,
-    )
-    if len(indices) == 0:
-        return detections
-    kept = np.asarray(indices).flatten()
-    return [detections[int(i)] for i in kept]
+    return nms_detections(detections, nms_iou_threshold)
 
 
 def _apply_post_filter(
@@ -157,7 +135,7 @@ def main() -> None:
     args = parser.parse_args()
 
     repo_root = find_repo_root()
-    _setup_path(repo_root)
+    add_perception_source_to_path(repo_root)
     os.chdir(repo_root)
 
     from eval.metrics import compute_ap_iou_threshold

@@ -28,6 +28,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+from agrobot_perception.utils.box_utils import box_iou
 
 # COCO standard IoU sweep and area thresholds
 _IOU_THRESHOLDS = np.linspace(0.5, 0.95, 10)
@@ -37,18 +38,6 @@ _RECALL_INTERP = np.linspace(0.0, 1.0, 101)  # 101-point interpolation
 
 
 Box = tuple[float, float, float, float]
-
-
-def _iou_box(b1: Box, b2: Box) -> float:
-    x1 = max(b1[0], b2[0])
-    y1 = max(b1[1], b2[1])
-    x2 = min(b1[2], b2[2])
-    y2 = min(b1[3], b2[3])
-    inter = max(0.0, x2 - x1) * max(0.0, y2 - y1)
-    a1 = (b1[2] - b1[0]) * (b1[3] - b1[1])
-    a2 = (b2[2] - b2[0]) * (b2[3] - b2[1])
-    union = a1 + a2 - inter
-    return inter / union if union > 0 else 0.0
 
 
 def _box_area(b: Box) -> float:
@@ -111,7 +100,7 @@ def _ap_at_iou(
             for j, gt in enumerate(gt_boxes_full):
                 if gt_matched[j] or not in_bucket[j]:
                     continue
-                iou = _iou_box(box, gt)
+                iou = box_iou(box, gt)
                 if iou > best_iou:
                     best_iou = iou
                     best_j = j

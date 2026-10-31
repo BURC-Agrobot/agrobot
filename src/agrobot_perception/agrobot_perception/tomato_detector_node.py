@@ -90,10 +90,8 @@ from agrobot_perception.utils.image_utils import (
     preprocess_for_dino,
     draw_detection_overlay,
 )
-from agrobot_perception.detectors.sam2_amg_detector import (
-    SAM2AMGDetector,
-    _select_device,
-)
+from agrobot_perception.detectors.sam2_amg_detector import SAM2AMGDetector
+from agrobot_perception.utils.device import select_device
 
 
 # QoS Profiles
@@ -206,7 +204,7 @@ class TomatoDetectorNode(Node):
 
         # Core Components
         self._bridge = CvBridge()
-        _device = _select_device()
+        _device = select_device()
         _siglip_enabled = self.get_parameter("siglip_enabled").value
         _nms = self.get_parameter("nms_iou_threshold").value
         _max_det = self.get_parameter("max_detections").value

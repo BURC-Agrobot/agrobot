@@ -53,7 +53,7 @@ class _DetectorLike(Protocol):
 
 
 def _box_nms(detections: list[dict], iou_threshold: float) -> list[dict]:
-    """Box NMS — same call as sam2_amg_detector._nms for bit-identical behaviour."""
+    """Box NMS — same call as box_utils.nms_detections for bit-identical behaviour."""
     if len(detections) <= 1 or iou_threshold <= 0:
         return detections
     boxes = np.array([d["box"] for d in detections], dtype=np.float32)

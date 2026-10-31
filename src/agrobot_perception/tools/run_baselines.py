@@ -48,13 +48,7 @@ logger = logging.getLogger(__name__)
 
 _INPUT_SIZE = 518
 
-from agrobot_perception.utils.repo_root import find_repo_root
-
-
-def _setup_path(repo_root: Path) -> None:
-    perception_dir = repo_root / "src" / "agrobot_perception"
-    if str(perception_dir) not in sys.path:
-        sys.path.insert(0, str(perception_dir))
+from agrobot_perception.utils.repo_root import add_perception_source_to_path, find_repo_root
 
 
 def _letterbox_with_meta(bgr: np.ndarray) -> tuple[np.ndarray, float, int, int]:
@@ -230,7 +224,7 @@ def main() -> None:
     args = parser.parse_args()
 
     repo_root = find_repo_root()
-    _setup_path(repo_root)
+    add_perception_source_to_path(repo_root)
     os.chdir(repo_root)
 
     val_list_path = args.val_list if args.val_list.is_absolute() else repo_root / args.val_list

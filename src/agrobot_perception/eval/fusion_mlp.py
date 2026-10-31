@@ -57,11 +57,10 @@ import cv2
 import numpy as np
 import torch
 import torch.nn as nn
+from agrobot_perception.utils.image_utils import denormalize_imagenet
 
 logger = logging.getLogger(__name__)
 
-_IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
-_IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 _INPUT_SIZE = 518
 
 FEATURE_NAMES = (
@@ -78,15 +77,6 @@ N_FEATURES = len(FEATURE_NAMES)
 
 class _DetectorLike(Protocol):
     def detect(self, preprocessed_chw: np.ndarray) -> list[dict]: ...
-
-
-def reconstruct_rgb(preprocessed_chw: np.ndarray) -> np.ndarray:
-    rgb_float = (
-        preprocessed_chw * _IMAGENET_STD[:, None, None]
-        + _IMAGENET_MEAN[:, None, None]
-    )
-    rgb_uint8 = (np.clip(rgb_float, 0, 1) * 255).astype(np.uint8)
-    return np.transpose(rgb_uint8, (1, 2, 0))
 
 
 def extract_features(det: dict, rgb_hwc: np.ndarray) -> np.ndarray:
@@ -214,7 +204,7 @@ class FusionMLPWrapper:
         dets = self._base.detect(preprocessed_chw)
         if not dets:
             return dets
-        rgb_hwc = reconstruct_rgb(preprocessed_chw)
+        rgb_hwc = denormalize_imagenet(preprocessed_chw)
         feats = np.stack([extract_features(d, rgb_hwc) for d in dets])
         # Apply the same standardization the trainer used. Skipping it leaves
         # the MLP scoring on a different distribution from training -> garbage
@@ -258,7 +248,7 @@ class FeatureDumpWrapper:
     def detect(self, preprocessed_chw: np.ndarray) -> list[dict]:
         import json
         dets = self._base.detect(preprocessed_chw)
-        rgb_hwc = reconstruct_rgb(preprocessed_chw)
+        rgb_hwc = denormalize_imagenet(preprocessed_chw)
         records = []
         for d in dets:
             f = extract_features(d, rgb_hwc)

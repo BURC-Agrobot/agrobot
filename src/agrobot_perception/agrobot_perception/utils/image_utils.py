@@ -22,6 +22,11 @@ BGRImage = np.ndarray
 RGBImage = np.ndarray
 
 
+# ImageNet statistics that DINOv2, SAM2, and most ViT-based models expect
+IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+
+
 def bgr_to_rgb(image: BGRImage) -> RGBImage:
     """Convert an OpenCV BGR image to RGB.
 
@@ -79,9 +84,17 @@ def normalize_imagenet(image: RGBImage) -> np.ndarray:
     Returns:
         float32 array (H, W, 3) normalized with ImageNet statistics.
     """
-    mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
-    std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
-    return (image.astype(np.float32) / 255.0 - mean) / std
+    return (image.astype(np.float32) / 255.0 - IMAGENET_MEAN) / IMAGENET_STD
+
+
+def denormalize_imagenet(preprocessed_chw: np.ndarray) -> RGBImage:
+    """Turn a normalized float32 (3, H, W) array back into a uint8 RGB image (H, W, 3)."""
+    rgb_float = (
+        preprocessed_chw * IMAGENET_STD[:, None, None]
+        + IMAGENET_MEAN[:, None, None]
+    )
+    rgb_uint8 = (np.clip(rgb_float, 0, 1) * 255).astype(np.uint8)
+    return np.transpose(rgb_uint8, (1, 2, 0))
 
 
 def preprocess_for_dino(
