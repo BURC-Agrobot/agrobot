@@ -57,7 +57,7 @@ if(BUILD_TESTING)
   find_program(MYPY NAMES mypy REQUIRED)
   # Check the launch file with strict Python typing
   add_test(NAME python_strict COMMAND "${MYPY}" --strict
-    "${CMAKE_CURRENT_SOURCE_DIR}/launch/mock.launch.py")
+    "${CMAKE_CURRENT_SOURCE_DIR}/launch/robot.launch.py")
 endif()
 
 # Apply the same C++ checks to every motion target
@@ -73,7 +73,7 @@ endforeach()
 # Install the motion executable and its compiled validation library
 install(TARGETS motion_rules motion_node
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION lib/${PROJECT_NAME})
-# Install the headless mock launch for ROS package discovery
+# Install the headless launch for ROS package discovery
 install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
 # Export interface runtime support for downstream action clients
 ament_export_dependencies(rosidl_default_runtime)
