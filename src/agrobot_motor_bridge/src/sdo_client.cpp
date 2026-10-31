@@ -75,6 +75,14 @@ bool is_reply_to(const can_frame & frame, const can_frame & request, canid_t res
          frame.data[1] == request.data[1] && frame.data[2] == request.data[2] &&
          frame.data[3] == request.data[3];
 }
+
+// Build the error for a refusal, keeping the drive's code
+SdoAbort make_abort(const std::string & action, std::uint32_t code)
+{
+  char code_text[16];
+  std::snprintf(code_text, sizeof(code_text), "0x%08X", code);
+  return SdoAbort(action + " aborted with " + code_text + " (" + abort_meaning(code) + ")", code);
+}
 }  // namespace
 
 SdoAbort::SdoAbort(const std::string & message, std::uint32_t code)
@@ -118,11 +126,7 @@ can_frame SdoClient::exchange(const can_frame & request, const std::string & act
 
     // Report a refusal the same way for reads and writes
     if (frame->data[0] == kAbort) {
-      const std::uint32_t abort_code = payload(*frame);
-      char code_text[16];
-      std::snprintf(code_text, sizeof(code_text), "0x%08X", abort_code);
-      throw SdoAbort(
-        action + " aborted with " + code_text + " (" + abort_meaning(abort_code) + ")", abort_code);
+      throw make_abort(action, payload(*frame));
     }
     return *frame;
   }

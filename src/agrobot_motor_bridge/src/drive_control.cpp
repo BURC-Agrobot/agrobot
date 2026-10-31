@@ -35,12 +35,12 @@ constexpr std::uint16_t kDisableVoltage = 0x0000;
 constexpr std::chrono::milliseconds kStateTimeout{500};
 constexpr std::chrono::milliseconds kPollPeriod{10};
 
-// Format a Statusword for error messages
+// Format a Statusword and the state it means for error messages
 std::string describe(std::uint16_t statusword)
 {
   char text[8];
   std::snprintf(text, sizeof(text), "0x%04X", statusword);
-  return text;
+  return state_name(decode_state(statusword)) + " (" + text + ")";
 }
 }  // namespace
 
@@ -140,23 +140,11 @@ void DriveControl::move_to(std::int32_t target_counts) const
   sdo_.write(kControlword, 0x00, kNewSetpoint, 2);
 
   // Wait for the drive to take the setpoint before lowering the bit
-  const auto acknowledge_deadline = std::chrono::steady_clock::now() + kStateTimeout;
-  while ((statusword_during_move() & kSetpointAcknowledgeBit) == 0) {
-    if (std::chrono::steady_clock::now() >= acknowledge_deadline) {
-      throw std::runtime_error("Drive did not acknowledge the new setpoint");
-    }
-    std::this_thread::sleep_for(kPollPeriod);
-  }
+  wait_during_move(kSetpointAcknowledgeBit, kStateTimeout, "Drive did not acknowledge the new setpoint");
   sdo_.write(kControlword, 0x00, kEnableOperation, 2);
 
   // Target reached is only meaningful once the setpoint has been taken
-  const auto move_deadline = std::chrono::steady_clock::now() + kMoveTimeout;
-  while ((statusword_during_move() & kTargetReachedBit) == 0) {
-    if (std::chrono::steady_clock::now() >= move_deadline) {
-      throw std::runtime_error("Drive did not reach the target in time");
-    }
-    std::this_thread::sleep_for(kPollPeriod);
-  }
+  wait_during_move(kTargetReachedBit, kMoveTimeout, "Drive did not reach the target in time");
 }
 
 std::int32_t DriveControl::position_counts() const
@@ -164,15 +152,23 @@ std::int32_t DriveControl::position_counts() const
   return static_cast<std::int32_t>(sdo_.read(kPositionActual, 0x00));
 }
 
-std::uint16_t DriveControl::statusword_during_move() const
+void DriveControl::wait_during_move(
+  std::uint16_t status_bit, std::chrono::milliseconds timeout, const std::string & timeout_error) const
 {
-  const std::uint16_t status = statusword();
-  const DriveState state = decode_state(status);
-  if (state != DriveState::operation_enabled) {
-    throw std::runtime_error(
-      "Drive reported " + state_name(state) + " (" + describe(status) + ") during a move");
+  const auto deadline = std::chrono::steady_clock::now() + timeout;
+  while (true) {
+    const std::uint16_t status = statusword();
+    if (decode_state(status) != DriveState::operation_enabled) {
+      throw std::runtime_error("Drive reported " + describe(status) + " during a move");
+    }
+    if ((status & status_bit) != 0) {
+      return;
+    }
+    if (std::chrono::steady_clock::now() >= deadline) {
+      throw std::runtime_error(timeout_error);
+    }
+    std::this_thread::sleep_for(kPollPeriod);
   }
-  return status;
 }
 
 void DriveControl::command(std::uint16_t controlword, DriveState expected) const
@@ -190,13 +186,11 @@ void DriveControl::command(std::uint16_t controlword, DriveState expected) const
     // Stop at once on a fault, because waiting cannot clear it
     if (state == DriveState::fault || state == DriveState::fault_reaction_active) {
       throw std::runtime_error(
-        "Drive reported " + state_name(state) + " (" + describe(status) + ") while going to " +
-        state_name(expected));
+        "Drive reported " + describe(status) + " while going to " + state_name(expected));
     }
     if (std::chrono::steady_clock::now() >= deadline) {
       throw std::runtime_error(
-        "Drive stayed in " + state_name(state) + " (" + describe(status) + ") instead of going to " +
-        state_name(expected));
+        "Drive stayed in " + describe(status) + " instead of going to " + state_name(expected));
     }
     std::this_thread::sleep_for(kPollPeriod);
   }

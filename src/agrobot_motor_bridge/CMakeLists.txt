@@ -25,27 +25,22 @@ target_link_libraries(sdo_client PUBLIC can_bus)
 add_library(drive_control src/drive_control.cpp)
 target_link_libraries(drive_control PUBLIC sdo_client)
 
-# Build the programs that exercise one layer each
-add_executable(send_frame src/send_frame.cpp)
-target_link_libraries(send_frame can_bus)
-add_executable(receive_frame src/receive_frame.cpp)
-target_link_libraries(receive_frame can_bus)
-add_executable(read_device_type src/read_device_type.cpp)
-target_link_libraries(read_device_type drive_control)
-add_executable(check_sdo_write src/check_sdo_write.cpp)
-target_link_libraries(check_sdo_write drive_control)
-add_executable(walk_drive_states src/walk_drive_states.cpp)
-target_link_libraries(walk_drive_states drive_control)
-add_executable(move_drive src/move_drive.cpp)
-target_link_libraries(move_drive drive_control)
+# Build the tool that exercises each layer through its own command
+add_executable(drive_tool src/drive_tool.cpp)
+target_link_libraries(drive_tool drive_control)
 
 # Collect targets that must share compiler and static-analysis checks
-set(bridge_targets can_bus sdo_client drive_control
-  send_frame receive_frame read_device_type check_sdo_write walk_drive_states move_drive)
+set(bridge_targets can_bus sdo_client drive_control drive_tool)
 
 # Require clang-tidy to enforce the configured C++ checks
 if(BUILD_TESTING)
   find_program(CLANG_TIDY NAMES clang-tidy REQUIRED)
+  # Check that commands which power the motor still refuse a real bus
+  foreach(command IN ITEMS walk move)
+    add_test(NAME ${command}_refuses_real_bus COMMAND drive_tool ${command} can0)
+    set_tests_properties(${command}_refuses_real_bus PROPERTIES
+      PASS_REGULAR_EXPRESSION "only runs on virtual buses")
+  endforeach()
 endif()
 
 # Apply the same C++ checks to every driver target

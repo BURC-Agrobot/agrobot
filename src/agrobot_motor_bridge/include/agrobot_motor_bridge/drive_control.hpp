@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <string>
 
@@ -57,8 +58,9 @@ public:
 private:
   // Send one command and wait for the state it should reach
   void command(std::uint16_t controlword, DriveState expected) const;
-  // Read Statusword during a move, or throw if the drive is no longer enabled
-  std::uint16_t statusword_during_move() const;
+  // Wait for a Statusword bit during a move, or throw if the drive stops being enabled or time runs out
+  void wait_during_move(
+    std::uint16_t status_bit, std::chrono::milliseconds timeout, const std::string & timeout_error) const;
 
   const SdoClient & sdo_;
 };

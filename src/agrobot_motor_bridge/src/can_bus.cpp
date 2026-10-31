@@ -28,6 +28,17 @@ std::runtime_error system_error(const std::string & call)
   close(socket_fd);
   throw error;
 }
+
+// The kernel moves a whole frame or fails, so treat anything else as an error
+void require_whole_frame(ssize_t transferred, const std::string & call)
+{
+  if (transferred < 0) {
+    throw system_error(call);
+  }
+  if (static_cast<size_t>(transferred) != sizeof(can_frame)) {
+    throw std::runtime_error(call + " moved a partial CAN frame");
+  }
+}
 }  // namespace
 
 CanBus::CanBus(const std::string & interface_name)
@@ -60,14 +71,7 @@ CanBus::~CanBus()
 
 void CanBus::send(const can_frame & frame) const
 {
-  // The kernel takes a whole frame or fails, so treat anything else as an error
-  const ssize_t written = write(socket_fd_, &frame, sizeof(frame));
-  if (written < 0) {
-    throw system_error("write");
-  }
-  if (static_cast<size_t>(written) != sizeof(frame)) {
-    throw std::runtime_error("write sent a partial CAN frame");
-  }
+  require_whole_frame(write(socket_fd_, &frame, sizeof(frame)), "write");
 }
 
 std::optional<can_frame> CanBus::receive(std::chrono::milliseconds timeout) const
@@ -84,15 +88,8 @@ std::optional<can_frame> CanBus::receive(std::chrono::milliseconds timeout) cons
     return std::nullopt;
   }
 
-  // The kernel gives a whole frame or fails, so treat anything else as an error
   can_frame frame{};
-  const ssize_t received = read(socket_fd_, &frame, sizeof(frame));
-  if (received < 0) {
-    throw system_error("read");
-  }
-  if (static_cast<size_t>(received) != sizeof(frame)) {
-    throw std::runtime_error("read returned a partial CAN frame");
-  }
+  require_whole_frame(read(socket_fd_, &frame, sizeof(frame)), "read");
   return frame;
 }
 }  // namespace agrobot_motor_bridge
